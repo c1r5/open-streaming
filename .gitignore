@@ -1,0 +1,4 @@
+db/
+docs/
+.env
+config.ini

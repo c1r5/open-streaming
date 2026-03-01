@@ -1,0 +1,11 @@
+### Search torrents
+GET http://localhost:3001/torrent/search?q=Transformers+O+Início HTTP/1.1
+Accept: application/json
+
+### Add torrent
+POST http://localhost:3001/torrent/add HTTP/1.1
+Content-Type: application/json
+
+{
+  "hash": "98d2e321c32eb52291f2b4f377317930e8fbd7cd"
+}
