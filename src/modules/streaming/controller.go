@@ -13,7 +13,7 @@ type Controller struct {
 	service common.IStreamingService
 }
 
-func (c *Controller) WatchStream() common.HandlerFunc {
+func (c *Controller) StreamWatch() common.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id, err := strconv.ParseUint(common.PathParam(r, "id"), 10, 64)
 		if err != nil {
@@ -21,7 +21,7 @@ func (c *Controller) WatchStream() common.HandlerFunc {
 			return
 		}
 
-		media, err := c.service.GetStream(uint(id))
+		media, err := c.service.GetStreamFile(uint(id))
 		if err != nil {
 			common.ErrorJSON(w, http.StatusNotFound, err.Error())
 			return
@@ -45,7 +45,7 @@ func (c *Controller) WatchStream() common.HandlerFunc {
 	}
 }
 
-func (c *Controller) GetStream() common.HandlerFunc {
+func (c *Controller) GetStreamInfo() common.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id, err := strconv.ParseUint(common.PathParam(r, "id"), 10, 64)
 		if err != nil {
@@ -53,15 +53,16 @@ func (c *Controller) GetStream() common.HandlerFunc {
 			return
 		}
 
-		media, err := c.service.GetStream(uint(id))
+		media, err := c.service.GetStreamInfo(uint(id))
 		if err != nil {
 			common.ErrorJSON(w, http.StatusNotFound, err.Error())
 			return
 		}
 
 		common.JSON(w, http.StatusOK, map[string]any{
-			"name": media.Name,
-			"path": media.Path,
+			"name": media.Filename,
+			"hash": media.Hash,
+			"imdb": media.IMDB,
 			"size": media.Size,
 		})
 	}

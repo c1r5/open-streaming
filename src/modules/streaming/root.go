@@ -20,6 +20,6 @@ func New(mux *http.ServeMux, eng common.ITorrentEngine, db *gorm.DB) {
 }
 
 func (s *StreamingModule) registerRoutes() {
-	s.mux.HandleFunc("GET /stream/watch/{id}", s.c.WatchStream())
-	s.mux.HandleFunc("GET /stream/info/{id}", s.c.GetStream())
+	s.mux.HandleFunc("GET /stream/watch/{id}", s.c.StreamWatch())
+	s.mux.HandleFunc("GET /stream/info/{id}", s.c.GetStreamInfo())
 }
