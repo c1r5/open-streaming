@@ -74,6 +74,11 @@ func main() {
 		log.Fatalf("cannot create torrent engine: %v\n", err)
 	}
 
+	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("ok"))
+	})
+
 	db := database.GetInstance()
 	torrent.New(mux, ts, eng, db)
 	streaming.New(mux, eng, db)
