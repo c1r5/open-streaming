@@ -26,16 +26,23 @@ func (c *Controller) AddHandler() common.HandlerFunc {
 		tctx, cancel := context.WithTimeout(r.Context(), timeout)
 		defer cancel()
 
-		err_channel := make(chan error, 1)
-		go func() { err_channel <- c.service.AddTorrent(&body) }()
+		type result struct {
+			id  uint
+			err error
+		}
+		ch := make(chan result, 1)
+		go func() {
+			id, err := c.service.AddTorrent(&body)
+			ch <- result{id, err}
+		}()
 
 		select {
-		case err := <-err_channel:
-			if err != nil {
-				common.ErrorJSON(w, http.StatusInternalServerError, err.Error())
+		case res := <-ch:
+			if res.err != nil {
+				common.ErrorJSON(w, http.StatusInternalServerError, res.err.Error())
 				return
 			}
-			w.WriteHeader(http.StatusCreated)
+			common.JSON(w, http.StatusCreated, map[string]uint{"id": res.id})
 		case <-tctx.Done():
 			common.ErrorJSON(w, http.StatusGatewayTimeout, "request timed out")
 		}

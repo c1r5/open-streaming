@@ -15,7 +15,7 @@ type AddTorrentOptions struct {
 }
 
 type ITorrentService interface {
-	AddTorrent(options *AddTorrentOptions) error
+	AddTorrent(options *AddTorrentOptions) (uint, error)
 	DeleteTorrent(hash string) error
 	SearchTorrents(query string) ([]*TorrentSearchResult, error)
 }

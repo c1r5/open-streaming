@@ -1,6 +1,7 @@
 package torrent
 
 import (
+	"errors"
 	"fmt"
 	"log"
 
@@ -15,32 +16,50 @@ type Service struct {
 	db            *gorm.DB
 }
 
-func (s *Service) AddTorrent(options *common.AddTorrentOptions) error {
+func (s *Service) AddTorrent(options *common.AddTorrentOptions) (uint, error) {
 
 	searchResult, err := s.searchCache.Get(options.Hash)
 
 	if err != nil {
-		return fmt.Errorf("failed to get torrent from cache: %w", err)
+		return 0, fmt.Errorf("failed to get torrent from cache: %w", err)
 	}
 
 	file, err := s.torrentEngine.Resolve(options.Hash)
 
 	if err != nil {
-		return fmt.Errorf("failed to resolve torrent: %w", err)
+		return 0, fmt.Errorf("failed to resolve torrent: %w", err)
 	}
 
 	if err := s.torrentEngine.PersistTorrentFile(options.Hash); err != nil {
 		log.Printf("warn: could not persist .torrent for hash=%s: %v", options.Hash, err)
 	}
 
-	return (&TorrentModel{
+	model := &TorrentModel{
 		IMDB:        searchResult.IMDB,
 		Hash:        options.Hash,
 		FileIndex:   file.Index,
 		TorrentName: file.Name,
 		OutputPath:  file.Path,
 		Size:        file.Size,
-	}).Create(s.db)
+	}
+	var existing *TorrentModel
+	
+	err = s.db.Where("hash = ?", options.Hash).First(&existing).Error
+
+	if err != nil {
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return 0, err
+		}
+
+		if err := model.Create(s.db); err != nil {
+			return 0, nil
+		}
+
+		return model.ID, nil
+	}
+
+	return existing.ID, nil
+	
 }
 
 func (s *Service) DeleteTorrent(hash string) error {
