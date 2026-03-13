@@ -2,6 +2,7 @@ package streaming
 
 import (
 	"fmt"
+	"log"
 
 	"github.com/c1r5/open-streaming/src/common"
 	"gorm.io/gorm"
@@ -23,12 +24,14 @@ func (s *Service) GetStreamFile(id uint) (*common.TorrentStreamFile, error) {
 		return nil, err
 	}
 
+	log.Printf("service: resolving stream id=%d hash=%s", id, record.Hash)
 	file, err := s.engine.Resolve(record.Hash)
 
 	if err != nil {
 		return nil, err
 	}
 
+	log.Printf("service: resolved id=%d file=%s size=%d", id, file.Name, file.Size)
 	return &common.TorrentStreamFile{
 		Path:   file.Path,
 		Reader: file.Reader,

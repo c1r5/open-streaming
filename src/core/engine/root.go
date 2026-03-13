@@ -2,6 +2,7 @@ package engine
 
 import (
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -135,15 +136,30 @@ func (t *TorrentEngine) Resolve(hash string) (*common.TorrentFile, error) {
 		t.fileCache.Set(hash, cached)
 	}
 
+	log.Printf("engine: resolve creating torrent reader (hash=%s, file=%s, size=%d)", hash, cached.name, cached.size)
 	reader := cached.source.NewReader()
 	reader.SetResponsive()
 	reader.SetReadahead(int64(t.readaheadBytes))
+	log.Printf("engine: torrent reader ready (readahead=%dMB)", t.readaheadBytes>>20)
+
+	var finalReader io.ReadSeeker = reader
+
+	if f, err := os.Open(cached.path); err == nil {
+		log.Printf("engine: using hybrid reader (path=%s, completed=%d/%d)",
+			cached.path, cached.source.BytesCompleted(), cached.size)
+		finalReader = &hybridReadSeeker{
+			local:  f,
+			remote: reader,
+			source: cached.source,
+			size:   cached.size,
+		}
+	}
 
 	return &common.TorrentFile{
 		Path:   cached.path,
 		Name:   cached.name,
 		Size:   cached.size,
-		Reader: reader,
+		Reader: finalReader,
 	}, nil
 }
 

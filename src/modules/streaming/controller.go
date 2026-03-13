@@ -21,11 +21,14 @@ func (c *Controller) StreamWatch() common.HandlerFunc {
 			return
 		}
 
+		log.Printf("watch: request id=%d method=%s range=%q", id, r.Method, r.Header.Get("Range"))
 		media, err := c.service.GetStreamFile(uint(id))
 		if err != nil {
+			log.Printf("watch: resolve failed id=%d err=%v", id, err)
 			common.ErrorJSON(w, http.StatusNotFound, err.Error())
 			return
 		}
+		log.Printf("watch: serving file=%s", media.Path)
 
 		defer func() {
 			if closer, ok := media.Reader.(interface{ Close() error }); ok {
