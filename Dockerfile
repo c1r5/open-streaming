@@ -8,7 +8,7 @@ RUN go mod download
 
 COPY ./src ./src
 
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o server ./src/main.go
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o server ./src/cmd/server/main.go
 
 # -------- Stage 2: Runtime --------
 FROM alpine:latest
@@ -16,9 +16,7 @@ FROM alpine:latest
 WORKDIR /app
 
 COPY --from=builder /app/server .
-COPY config.ini .
-COPY ./db/database.db ./db/database.db
 
 EXPOSE 3000
 
-CMD ["./server"]
+CMD ["./server", "serve"]

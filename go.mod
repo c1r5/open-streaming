@@ -6,6 +6,7 @@ require (
 	github.com/anacrolix/torrent v1.61.0
 	github.com/ncruces/go-sqlite3 v0.30.5
 	github.com/ncruces/go-sqlite3/gormlite v0.30.2
+	github.com/spf13/cobra v1.10.2
 	golang.org/x/sync v0.19.0
 	gorm.io/gorm v1.31.1
 )
@@ -49,6 +50,7 @@ require (
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/huandu/xstrings v1.5.0 // indirect
+	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/jinzhu/inflection v1.0.0 // indirect
 	github.com/jinzhu/now v1.1.5 // indirect
 	github.com/klauspost/cpuid/v2 v2.3.0 // indirect
@@ -81,6 +83,7 @@ require (
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/rs/dnscache v0.0.0-20230804202142-fc85eb664529 // indirect
 	github.com/spaolacci/murmur3 v1.1.0 // indirect
+	github.com/spf13/pflag v1.0.9 // indirect
 	github.com/tetratelabs/wazero v1.11.0 // indirect
 	github.com/tidwall/btree v1.8.1 // indirect
 	github.com/wlynxg/anet v0.0.5 // indirect

@@ -8,7 +8,20 @@ import (
 	"strconv"
 )
 
-const defaultConfigPath = "./config.ini"
+var binDir string
+
+func init() {
+	exe, err := os.Executable()
+	if err != nil {
+		log.Fatal("failed to resolve executable path:", err)
+	}
+
+	binDir = filepath.Dir(exe)
+}
+
+func BinDir() string {
+	return binDir
+}
 
 type Config struct {
 	TorrentEngine TorrentEngineConfig
@@ -72,7 +85,7 @@ type DatabaseConfig struct {
 var global *Config
 
 func init() {
-	cfg, err := Load(defaultConfigPath)
+	cfg, err := Load(filepath.Join(binDir, "config.ini"))
 	if err != nil {
 		log.Fatalf("config: %v", err)
 	}
@@ -171,6 +184,10 @@ func buildConfig(sections iniSections) *Config {
 		},
 	}
 
+	if defaultCFG.Database.DSN == "" {
+		defaultCFG.Database.DSN = filepath.Join(binDir, "database.db")
+	}
+
 	if os.Getenv("ENVMODE") == envTypeName[DEV] {
 		defaultCFG.Server.Port = "3001"
 	}
@@ -190,11 +207,11 @@ func writeDefaults(path string) error {
 
 const defaultINI = `
 [torrentio]
-base_url =
+base_url = https://torrentio.strem.fun
 user_agent =
 
 [imdb]
-base_url =
+base_url = http://api.imdbapi.dev
 
 [webtorrent]
 data_dir =

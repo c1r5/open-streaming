@@ -5,9 +5,9 @@ GOCLEAN = $(GOCMD) clean
 GOTEST  = $(GOCMD) test
 GORUN   = $(GOCMD) run
 
-OUT = ../bin
+OUT ?= $(shell cd ../.. && pwd)/bin
 BINARY  = server 
-.PHONY: build test clean run deps tidy
+.PHONY: build test clean run deps tidy db backend
 
 deps:
 	$(GOCMD) get github.com/go-gormigrate/gormigrate/v2
@@ -20,7 +20,7 @@ tidy:
 	$(GOCMD) mod tidy
 
 build:
-	$(GOBUILD) -tags go_sqlite3 -o $(OUT)/$(BINARY) ./src/main.go
+	$(GOBUILD) -tags go_sqlite3 -o $(OUT)/$(BINARY) ./src/cmd/server/main.go
 
 test:
 	$(GOTEST) ./...
@@ -30,7 +30,13 @@ clean:
 	rm -f $(OUT)/$(BINARY)
 
 run: build
-	$(OUT)/$(BINARY)
+	$(OUT)/$(BINARY) serve
+
+db: build
+	$(OUT)/$(BINARY) migrate
+
+backend: build
+	$(OUT)/$(BINARY) serve
 
 deploy:
 	@docker compose up --build -d backend
