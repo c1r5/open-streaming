@@ -30,11 +30,15 @@ github.com/anacrolix/chansync v0.7.0 h1:wgwxbsJRmOqNjil4INpxHrDp4rlqQhECxR8/WBP4
 github.com/anacrolix/chansync v0.7.0/go.mod h1:DZsatdsdXxD0WiwcGl0nJVwyjCKMDv+knl1q2iBjA2k=
 github.com/anacrolix/dht/v2 v2.23.0 h1:EuD17ykTTEkAMPLjBsS5QjGOwuBgLTdQhds6zPAjeVY=
 github.com/anacrolix/dht/v2 v2.23.0/go.mod h1:seXRz6HLw8zEnxlysf9ye2eQbrKUmch6PyOHpe/Nb/U=
+github.com/anacrolix/dms v1.7.2 h1:JAAJJIlXp+jT2yEah1EbR1AFpGALHL238uSKFXec2qw=
+github.com/anacrolix/dms v1.7.2/go.mod h1:excFJW5MKBhn5yt5ZMyeE9iFVqnO6tEGQl7YG/2tUoQ=
 github.com/anacrolix/envpprof v0.0.0-20180404065416-323002cec2fa/go.mod h1:KgHhUaQMc8cC0+cEflSgCFNFbKwi5h54gqtVn8yhP7c=
 github.com/anacrolix/envpprof v1.0.0/go.mod h1:KgHhUaQMc8cC0+cEflSgCFNFbKwi5h54gqtVn8yhP7c=
 github.com/anacrolix/envpprof v1.1.0/go.mod h1:My7T5oSqVfEn4MD4Meczkw/f5lSIndGAKu/0SM/rkf4=
 github.com/anacrolix/envpprof v1.5.0 h1:eMI07YWjk86b+8N9A4k0OtLSS472/1Z0qraAW2oPZb4=
 github.com/anacrolix/envpprof v1.5.0/go.mod h1:OQPV3SNK6uVAlXL4slcZVXv+xLcE0ybWgVKcUfr5fE8=
+github.com/anacrolix/ffprobe v1.1.0 h1:eKBudnERW9zRJ0+ge6FzkQ0pWLyq142+FJrwRwSRMT4=
+github.com/anacrolix/ffprobe v1.1.0/go.mod h1:MXe+zG/RRa5OdIf5+VYYfS/CfsSqOH7RrvGIqJBzqhI=
 github.com/anacrolix/generics v0.0.0-20230113004304-d6428d516633/go.mod h1:ff2rHB/joTV03aMSSn/AZNnaIpUw0h3njetGsaXcMy8=
 github.com/anacrolix/generics v0.2.0 h1:gPwGOs14irokFN9kUP1i1A0Bn0FPT7/hWWD3hHKSKNw=
 github.com/anacrolix/generics v0.2.0/go.mod h1:NGehhfeXJPBujPx0s6cstSj8B+TERsTY32Xckfx5ftc=

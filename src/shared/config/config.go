@@ -32,6 +32,7 @@ type Config struct {
 	Torrentio     TorrentioConfig
 	Torrent       TorrentConfig
 	Database      DatabaseConfig
+	DLNA          DLNAConfig
 }
 
 type IMDBConfig struct {
@@ -44,23 +45,23 @@ type TorrentioConfig struct {
 }
 
 type TorrentEngineConfig struct {
-	DataDir        string
-	ReadaheadMB    int
+	DataDir         string
+	ReadaheadMB     int
 	CacheTTLMinutes int
 }
 
 type TranscodeConfig struct {
-	MaxConcurrent    int
-	TimeoutSeconds   int
-	Preset           string
-	CRF              string
-	VideoProfile     string
-	VideoLevel       string
-	AudioBitrate     string
-	AudioChannels    int
-	ProbeTimeoutSeconds  int
-	ProbeSize            string
-	AnalyzeDuration      string
+	MaxConcurrent       int
+	TimeoutSeconds      int
+	Preset              string
+	CRF                 string
+	VideoProfile        string
+	VideoLevel          string
+	AudioBitrate        string
+	AudioChannels       int
+	ProbeTimeoutSeconds int
+	ProbeSize           string
+	AnalyzeDuration     string
 }
 
 type ResolverConfig struct {
@@ -80,6 +81,13 @@ type TorrentConfig struct {
 
 type DatabaseConfig struct {
 	DSN string
+}
+
+type DLNAConfig struct {
+	Enabled      bool
+	FriendlyName string
+	Port         int
+	Interface    string
 }
 
 var global *Config
@@ -142,8 +150,8 @@ func buildConfig(sections iniSections) *Config {
 
 	defaultCFG := &Config{
 		Torrentio: TorrentioConfig{
-			BaseURL:   get("torrentio", "base_url", os.Getenv("TORRENTIO_BASE_URL")),
-			// Use a lib to randomize user_agent 
+			BaseURL: get("torrentio", "base_url", os.Getenv("TORRENTIO_BASE_URL")),
+			// Use a lib to randomize user_agent
 			UserAgent: get("torrentio", "user_agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"),
 		},
 		IMDB: IMDBConfig{
@@ -181,6 +189,12 @@ func buildConfig(sections iniSections) *Config {
 		},
 		Database: DatabaseConfig{
 			DSN: get("database", "dsn", os.Getenv("DATABASE_DSN")),
+		},
+		DLNA: DLNAConfig{
+			Enabled:      get("dlna", "enabled", "true") == "true",
+			FriendlyName: get("dlna", "friendly_name", "Local TV"),
+			Port:         parseInt("dlna", "port", 8200),
+			Interface:    get("dlna", "interface", ""),
 		},
 	}
 
@@ -245,4 +259,10 @@ add_timeout_seconds = 15
 
 [database]
 dsn =
+
+[dlna]
+enabled = true
+friendly_name = Local TV
+port = 8200
+interface =
 `

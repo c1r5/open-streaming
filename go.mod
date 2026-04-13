@@ -3,6 +3,7 @@ module github.com/c1r5/open-streaming
 go 1.25.0
 
 require (
+	github.com/anacrolix/dms v1.7.2
 	github.com/anacrolix/torrent v1.61.0
 	github.com/ncruces/go-sqlite3 v0.30.5
 	github.com/ncruces/go-sqlite3/gormlite v0.30.2
@@ -18,6 +19,7 @@ require (
 	github.com/anacrolix/chansync v0.7.0 // indirect
 	github.com/anacrolix/dht/v2 v2.23.0 // indirect
 	github.com/anacrolix/envpprof v1.5.0 // indirect
+	github.com/anacrolix/ffprobe v1.1.0 // indirect
 	github.com/anacrolix/generics v0.2.0 // indirect
 	github.com/anacrolix/go-libutp v1.3.2 // indirect
 	github.com/anacrolix/log v0.17.1-0.20251118025802-918f1157b7bb // indirect

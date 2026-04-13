@@ -11,6 +11,7 @@ import (
 	"github.com/c1r5/open-streaming/src/modules/catalog/application"
 	"github.com/c1r5/open-streaming/src/modules/catalog/infrastructure/imdb"
 	"github.com/c1r5/open-streaming/src/modules/catalog/infrastructure/torrentio"
+	"github.com/c1r5/open-streaming/src/modules/dlna"
 	"github.com/c1r5/open-streaming/src/modules/streaming"
 	"github.com/c1r5/open-streaming/src/modules/torrent_engine"
 	"github.com/c1r5/open-streaming/src/modules/torrent_engine/infrastructure/libtorrent"
@@ -66,6 +67,16 @@ var serveCmd = &cobra.Command{
 		torrent_engine.New(mux, ts, eng, db)
 		streaming.New(mux, eng, db)
 
+		dlnaModule, err := dlna.New(db, cfg)
+		if err != nil {
+			log.Printf("DLNA disabled: %v", err)
+		}
+		if dlnaModule != nil {
+			if err := dlnaModule.Start(); err != nil {
+				log.Printf("DLNA start failed: %v", err)
+			}
+		}
+
 		handler := middleware.WithCORS(middleware.WithRecovery(middleware.WithLogging(mux)))
 
 		s := &http.Server{
@@ -90,6 +101,9 @@ var serveCmd = &cobra.Command{
 		}()
 
 		<-done
+		if dlnaModule != nil {
+			dlnaModule.Stop()
+		}
 		log.Println("Program terminated gracefully.")
 	},
 }
