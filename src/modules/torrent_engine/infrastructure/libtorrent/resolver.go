@@ -21,11 +21,23 @@ type resolvedFile struct {
 }
 
 func (t *TorrentEngine) Resolve(hash string) (*domain.TorrentFile, error) {
+	return t.resolve(&domain.MagnetModel{Hash: hash})
+}
+
+func (t *TorrentEngine) ResolveMagnet(magnet *domain.MagnetModel) (*domain.TorrentFile, error) {
+	if magnet == nil || magnet.Hash == "" {
+		return nil, fmt.Errorf("torrent engine: magnet has no info hash")
+	}
+	return t.resolve(magnet)
+}
+
+func (t *TorrentEngine) resolve(magnet *domain.MagnetModel) (*domain.TorrentFile, error) {
+	hash := magnet.Hash
 	cached, _ := t.fileCache.Get(hash)
 
 	if cached == nil {
 		meta, err := t.cache.Retrieve(hash, func() (*TorrentMeta, error) {
-			return t.fetchMeta(&domain.MagnetModel{Hash: hash})
+			return t.fetchMeta(magnet)
 		})
 
 		if err != nil {

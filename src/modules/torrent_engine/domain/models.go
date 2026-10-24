@@ -10,7 +10,8 @@ import (
 )
 
 type AddTorrentOptions struct {
-	Hash string `json:"hash"`
+	Hash   string `json:"hash"`
+	Magnet string `json:"magnet"`
 }
 
 type TorrentFile struct {
@@ -23,6 +24,7 @@ type TorrentFile struct {
 
 type ITorrentEngine interface {
 	Resolve(hash string) (*TorrentFile, error)
+	ResolveMagnet(magnet *MagnetModel) (*TorrentFile, error)
 	PersistTorrentFile(hash string) error
 }
 

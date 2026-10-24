@@ -96,13 +96,13 @@ What is not here yet: a DMR, a control point, `SetAVTransportURI`, or any push-t
 
 ## Features
 
-- Title search through IMDb, stream list through Torrentio (`brazuca` movie configuration).
-- BitTorrent streaming client with magnet parse (v1 and v2), tracker extraction, and `.torrent` persistence.
+- Title search through IMDb, stream list through Torrentio (`brazuca` movie configuration). Search stays off until `IMDB_BASE_URL` and `TORRENTIO_BASE_URL` are both set.
+- BitTorrent streaming client with magnet parse (v1 and v2), tracker extraction, and `.torrent` persistence. `POST /torrent/add` accepts `{ "magnet": "magnet:?xt=urn:btih:..." }` and returns the id used by `/stream/watch/{id}`.
 - Largest-video selection, responsive reader, readahead, hybrid local/swarm reads.
 - SQLite library of added torrents, warmed on startup.
 - HTTP range streaming with DLNA content-feature headers.
 - DLNA/UPnP DMS: SSDP announce plus a virtual Movies folder.
-- Cobra CLI (`serve`, `migrate`), `config.ini` next to the binary, Docker image.
+- Cobra CLI (`serve`, `migrate`), configuration from the environment, Docker image.
 
 Not done: DMR / control point, transcode-on-play, delete, subtitles, a web UI.
 
@@ -119,7 +119,7 @@ Not done: DMR / control point, transcode-on-play, delete, subtitles, a web UI.
 
 ## Run
 
-Go toolchain on PATH. The binary writes `config.ini` beside itself on first start if the file is missing.
+Go toolchain on PATH. Settings come from the environment. There is no config file.
 
 ```bash
 make build
@@ -139,7 +139,7 @@ The image only exposes `3000`. DLNA SSDP is multicast and needs host networking 
 
 ### Config
 
-`config.ini` sections: `torrentio`, `imdb`, `webtorrent` (engine data dir, readahead, metadata cache TTL), `transcode` (unused by the watch path), `resolver`, `server`, `torrent` (search cache and add timeout), `database`, `dlna`.
+Environment variables follow the old section names: `TORRENTIO_BASE_URL`, `TORRENTIO_USER_AGENT`, `IMDB_BASE_URL`, `WEBTORRENT_DATA_DIR`, `WEBTORRENT_READAHEAD_MB`, `WEBTORRENT_CACHE_TTL_MINUTES`, `TRANSCODE_*`, `RESOLVER_HEAD_TIMEOUT_SECONDS`, `SERVER_PORT`, `SERVER_READ_TIMEOUT_SECONDS`, `SERVER_MAX_HEADER_BYTES`, `TORRENT_SEARCH_CACHE_TTL_MINUTES`, `TORRENT_ADD_TIMEOUT_SECONDS`, `DATABASE_DSN`, `DLNA_ENABLED`, `DLNA_FRIENDLY_NAME`, `DLNA_PORT`, `DLNA_INTERFACE`. `GET /torrent/search` returns 503 until both catalog URLs are set.
 
 ## Layout
 
@@ -151,5 +151,5 @@ src/modules/torrent_engine
   infrastructure/libtorrent   client, resolve, hybrid reader, .torrent persist
 src/modules/streaming   /stream/watch and /stream/info
 src/modules/dlna        DMS browse of the torrents table
-src/shared              config.ini, sqlite, http helpers
+src/shared              config, sqlite, http helpers
 ```

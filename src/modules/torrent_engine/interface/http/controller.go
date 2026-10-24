@@ -24,6 +24,17 @@ func (c *Controller) AddHandler() sharedhttp.HandlerFunc {
 			return
 		}
 
+		if body.Magnet == "" && body.Hash == "" {
+			sharedhttp.ErrorJSON(w, stdhttp.StatusBadRequest, "hash or magnet required")
+			return
+		}
+		if body.Magnet != "" {
+			if _, err := domain.Parse(body.Magnet); err != nil {
+				sharedhttp.ErrorJSON(w, stdhttp.StatusBadRequest, err.Error())
+				return
+			}
+		}
+
 		timeout := time.Duration(config.Get().Torrent.AddTimeoutSeconds) * time.Second
 		tctx, cancel := context.WithTimeout(r.Context(), timeout)
 		defer cancel()
@@ -57,7 +68,16 @@ func (c *Controller) DeleteHandler() sharedhttp.HandlerFunc {
 
 func (c *Controller) SearchHandler() sharedhttp.HandlerFunc {
 	return func(w stdhttp.ResponseWriter, r *stdhttp.Request) {
+		if !config.SearchEnabled() {
+			sharedhttp.ErrorJSON(w, stdhttp.StatusServiceUnavailable, "search disabled")
+			return
+		}
+
 		query := sharedhttp.QueryParam(r, "q")
+		if query == "" {
+			sharedhttp.ErrorJSON(w, stdhttp.StatusBadRequest, "query required")
+			return
+		}
 
 		results, err := c.service.SearchTorrents(query)
 		if err != nil {

@@ -1,7 +1,6 @@
 package config
 
 import (
-	"fmt"
 	"log"
 	"os"
 	"path/filepath"
@@ -17,6 +16,7 @@ func init() {
 	}
 
 	binDir = filepath.Dir(exe)
+	global = loadFromEnv()
 }
 
 func BinDir() string {
@@ -92,177 +92,91 @@ type DLNAConfig struct {
 
 var global *Config
 
-func init() {
-	cfg, err := Load(filepath.Join(binDir, "config.ini"))
-	if err != nil {
-		log.Fatalf("config: %v", err)
-	}
-
-	global = cfg
-}
-
 func Get() *Config {
 	return global
 }
 
-func Load(path string) (*Config, error) {
-	if _, err := os.Stat(path); os.IsNotExist(err) {
-		if err := writeDefaults(path); err != nil {
-			return nil, fmt.Errorf("failed to create default config: %w", err)
-		}
-		log.Printf("config: created default config at %s", path)
-	}
-
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read config: %w", err)
-	}
-
-	sections, err := parseINI(string(data))
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse config: %w", err)
-	}
-
-	return buildConfig(sections), nil
+func SearchEnabled() bool {
+	cfg := Get()
+	return cfg.IMDB.BaseURL != "" && cfg.Torrentio.BaseURL != ""
 }
 
-func buildConfig(sections iniSections) *Config {
-	get := func(section, key, def string) string {
-		if s, ok := sections[section]; ok {
-			if v, ok := s[key]; ok && v != "" {
-				return v
-			}
-		}
-		return def
+func envString(key, fallback string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
 	}
+	return fallback
+}
 
-	parseInt := func(section, key string, def int) int {
-		v := get(section, key, "")
-		if v == "" {
-			return def
-		}
-		n, err := strconv.Atoi(v)
-		if err != nil || n <= 0 {
-			return def
-		}
-		return n
+func envInt(key string, fallback int) int {
+	v := os.Getenv(key)
+	if v == "" {
+		return fallback
 	}
+	n, err := strconv.Atoi(v)
+	if err != nil || n <= 0 {
+		return fallback
+	}
+	return n
+}
 
-	defaultCFG := &Config{
+func loadFromEnv() *Config {
+	cfg := &Config{
 		Torrentio: TorrentioConfig{
-			BaseURL: get("torrentio", "base_url", os.Getenv("TORRENTIO_BASE_URL")),
-			// Use a lib to randomize user_agent
-			UserAgent: get("torrentio", "user_agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"),
+			BaseURL:   envString("TORRENTIO_BASE_URL", ""),
+			UserAgent: envString("TORRENTIO_USER_AGENT", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"),
 		},
 		IMDB: IMDBConfig{
-			BaseURL: get("imdb", "base_url", os.Getenv("IMDB_BASE_URL")),
+			BaseURL: envString("IMDB_BASE_URL", ""),
 		},
 		TorrentEngine: TorrentEngineConfig{
-			DataDir:         get("webtorrent", "data_dir", os.Getenv("WEBTORRENT_DATA_DIR")),
-			ReadaheadMB:     parseInt("webtorrent", "readahead_mb", 50),
-			CacheTTLMinutes: parseInt("webtorrent", "cache_ttl_minutes", 300),
+			DataDir:         envString("WEBTORRENT_DATA_DIR", ""),
+			ReadaheadMB:     envInt("WEBTORRENT_READAHEAD_MB", 50),
+			CacheTTLMinutes: envInt("WEBTORRENT_CACHE_TTL_MINUTES", 300),
 		},
 		Transcode: TranscodeConfig{
-			MaxConcurrent:       parseInt("transcode", "max_concurrent", 3),
-			TimeoutSeconds:      parseInt("transcode", "timeout_seconds", 60),
-			Preset:              get("transcode", "preset", "ultrafast"),
-			CRF:                 get("transcode", "crf", "23"),
-			VideoProfile:        get("transcode", "video_profile", "main"),
-			VideoLevel:          get("transcode", "video_level", "4.0"),
-			AudioBitrate:        get("transcode", "audio_bitrate", "128k"),
-			AudioChannels:       parseInt("transcode", "audio_channels", 2),
-			ProbeTimeoutSeconds: parseInt("transcode", "probe_timeout_seconds", 120),
-			ProbeSize:           get("transcode", "probe_size", "100M"),
-			AnalyzeDuration:     get("transcode", "analyze_duration", "100M"),
+			MaxConcurrent:       envInt("TRANSCODE_MAX_CONCURRENT", 3),
+			TimeoutSeconds:      envInt("TRANSCODE_TIMEOUT_SECONDS", 60),
+			Preset:              envString("TRANSCODE_PRESET", "ultrafast"),
+			CRF:                 envString("TRANSCODE_CRF", "23"),
+			VideoProfile:        envString("TRANSCODE_VIDEO_PROFILE", "main"),
+			VideoLevel:          envString("TRANSCODE_VIDEO_LEVEL", "4.0"),
+			AudioBitrate:        envString("TRANSCODE_AUDIO_BITRATE", "128k"),
+			AudioChannels:       envInt("TRANSCODE_AUDIO_CHANNELS", 2),
+			ProbeTimeoutSeconds: envInt("TRANSCODE_PROBE_TIMEOUT_SECONDS", 120),
+			ProbeSize:           envString("TRANSCODE_PROBE_SIZE", "100M"),
+			AnalyzeDuration:     envString("TRANSCODE_ANALYZE_DURATION", "100M"),
 		},
 		Resolver: ResolverConfig{
-			HeadTimeoutSeconds: parseInt("resolver", "head_timeout_seconds", 10),
+			HeadTimeoutSeconds: envInt("RESOLVER_HEAD_TIMEOUT_SECONDS", 10),
 		},
 		Server: ServerConfig{
-			Port:               get("server", "port", os.Getenv("SERVER_PORT")),
-			ReadTimeoutSeconds: parseInt("server", "read_timeout_seconds", 10),
-			MaxHeaderBytes:     parseInt("server", "max_header_bytes", 1<<20),
+			Port:               envString("SERVER_PORT", "3000"),
+			ReadTimeoutSeconds: envInt("SERVER_READ_TIMEOUT_SECONDS", 10),
+			MaxHeaderBytes:     envInt("SERVER_MAX_HEADER_BYTES", 1<<20),
 		},
 		Torrent: TorrentConfig{
-			SearchCacheTTLMinutes: parseInt("torrent", "search_cache_ttl_minutes", 5),
-			AddTimeoutSeconds:     parseInt("torrent", "add_timeout_seconds", 15),
+			SearchCacheTTLMinutes: envInt("TORRENT_SEARCH_CACHE_TTL_MINUTES", 5),
+			AddTimeoutSeconds:     envInt("TORRENT_ADD_TIMEOUT_SECONDS", 15),
 		},
 		Database: DatabaseConfig{
-			DSN: get("database", "dsn", os.Getenv("DATABASE_DSN")),
+			DSN: envString("DATABASE_DSN", ""),
 		},
 		DLNA: DLNAConfig{
-			Enabled:      get("dlna", "enabled", "true") == "true",
-			FriendlyName: get("dlna", "friendly_name", "Local TV"),
-			Port:         parseInt("dlna", "port", 8200),
-			Interface:    get("dlna", "interface", ""),
+			Enabled:      envString("DLNA_ENABLED", "true") == "true",
+			FriendlyName: envString("DLNA_FRIENDLY_NAME", "Local TV"),
+			Port:         envInt("DLNA_PORT", 8200),
+			Interface:    envString("DLNA_INTERFACE", ""),
 		},
 	}
 
-	if defaultCFG.Database.DSN == "" {
-		defaultCFG.Database.DSN = filepath.Join(binDir, "database.db")
+	if cfg.Database.DSN == "" {
+		cfg.Database.DSN = filepath.Join(binDir, "database.db")
 	}
 
 	if os.Getenv("ENVMODE") == envTypeName[DEV] {
-		defaultCFG.Server.Port = "3001"
+		cfg.Server.Port = "3001"
 	}
 
-	return defaultCFG
+	return cfg
 }
-
-func writeDefaults(path string) error {
-	// Only create the directory if it is not the current working directory
-	if dir := filepath.Dir(path); dir != "." {
-		if err := os.MkdirAll(dir, 0o755); err != nil {
-			return err
-		}
-	}
-	return os.WriteFile(path, []byte(defaultINI), 0o644)
-}
-
-const defaultINI = `
-[torrentio]
-base_url = https://torrentio.strem.fun
-user_agent =
-
-[imdb]
-base_url = http://api.imdbapi.dev
-
-[webtorrent]
-data_dir =
-readahead_mb = 50
-cache_ttl_minutes = 300
-
-[transcode]
-max_concurrent = 3
-timeout_seconds = 60
-preset = ultrafast
-crf = 23
-video_profile = main
-video_level = 4.0
-audio_bitrate = 128k
-audio_channels = 2
-probe_timeout_seconds = 120
-probe_size = 100M
-analyze_duration = 100M
-
-[resolver]
-head_timeout_seconds = 10
-
-[server]
-port = 3000
-read_timeout_seconds = 10
-max_header_bytes = 1048576
-
-[torrent]
-search_cache_ttl_minutes = 5
-add_timeout_seconds = 15
-
-[database]
-dsn =
-
-[dlna]
-enabled = true
-friendly_name = Local TV
-port = 8200
-interface =
-`
