@@ -57,7 +57,16 @@ func (c *Controller) DeleteHandler() sharedhttp.HandlerFunc {
 
 func (c *Controller) SearchHandler() sharedhttp.HandlerFunc {
 	return func(w stdhttp.ResponseWriter, r *stdhttp.Request) {
+		if !config.SearchEnabled() {
+			sharedhttp.ErrorJSON(w, stdhttp.StatusServiceUnavailable, "search disabled")
+			return
+		}
+
 		query := sharedhttp.QueryParam(r, "q")
+		if query == "" {
+			sharedhttp.ErrorJSON(w, stdhttp.StatusBadRequest, "query required")
+			return
+		}
 
 		results, err := c.service.SearchTorrents(query)
 		if err != nil {
