@@ -20,49 +20,65 @@ type Service struct {
 }
 
 func (s *Service) AddTorrent(options *domain.AddTorrentOptions) (uint, error) {
+	var (
+		hash string
+		imdb *string
+		file *domain.TorrentFile
+		err  error
+	)
 
-	searchResult, err := s.searchCache.Get(options.Hash)
-
-	if err != nil {
-		return 0, fmt.Errorf("failed to get torrent from cache: %w", err)
+	if options.Magnet != "" {
+		magnet, parseErr := domain.Parse(options.Magnet)
+		if parseErr != nil {
+			return 0, parseErr
+		}
+		hash = magnet.Hash
+		file, err = s.torrentEngine.ResolveMagnet(magnet)
+	} else if options.Hash != "" {
+		hash = options.Hash
+		searchResult, cacheErr := s.searchCache.Get(options.Hash)
+		if cacheErr != nil {
+			return 0, fmt.Errorf("failed to get torrent from cache: %w", cacheErr)
+		}
+		if searchResult.IMDB != "" {
+			id := searchResult.IMDB
+			imdb = &id
+		}
+		file, err = s.torrentEngine.Resolve(options.Hash)
+	} else {
+		return 0, fmt.Errorf("hash or magnet required")
 	}
-
-	file, err := s.torrentEngine.Resolve(options.Hash)
 
 	if err != nil {
 		return 0, fmt.Errorf("failed to resolve torrent: %w", err)
 	}
 
-	if err := s.torrentEngine.PersistTorrentFile(options.Hash); err != nil {
-		log.Printf("warn: could not persist .torrent for hash=%s: %v", options.Hash, err)
+	if err := s.torrentEngine.PersistTorrentFile(hash); err != nil {
+		log.Printf("warn: could not persist .torrent for hash=%s: %v", hash, err)
 	}
 
 	model := &persistence.TorrentModel{
-		IMDB:        searchResult.IMDB,
-		Hash:        options.Hash,
+		IMDB:        imdb,
+		Hash:        hash,
 		FileIndex:   file.Index,
 		TorrentName: file.Name,
 		OutputPath:  file.Path,
 		Size:        file.Size,
 	}
-	var existing *persistence.TorrentModel
 
-	err = s.db.Where("hash = ?", options.Hash).First(&existing).Error
-
+	var existing persistence.TorrentModel
+	err = s.db.Where("hash = ?", hash).First(&existing).Error
 	if err != nil {
 		if !errors.Is(err, gorm.ErrRecordNotFound) {
 			return 0, err
 		}
-
 		if err := model.Create(s.db); err != nil {
-			return 0, nil
+			return 0, err
 		}
-
 		return model.ID, nil
 	}
 
 	return existing.ID, nil
-
 }
 
 func (s *Service) DeleteTorrent(hash string) error {

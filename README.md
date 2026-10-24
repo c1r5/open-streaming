@@ -97,7 +97,7 @@ What is not here yet: a DMR, a control point, `SetAVTransportURI`, or any push-t
 ## Features
 
 - Title search through IMDb, stream list through Torrentio (`brazuca` movie configuration). Search stays off until `IMDB_BASE_URL` and `TORRENTIO_BASE_URL` are both set.
-- BitTorrent streaming client with magnet parse (v1 and v2), tracker extraction, and `.torrent` persistence.
+- BitTorrent streaming client with magnet parse (v1 and v2), tracker extraction, and `.torrent` persistence. `POST /torrent/add` accepts `{ "magnet": "magnet:?xt=urn:btih:..." }` and returns the id used by `/stream/watch/{id}`.
 - Largest-video selection, responsive reader, readahead, hybrid local/swarm reads.
 - SQLite library of added torrents, warmed on startup.
 - HTTP range streaming with DLNA content-feature headers.

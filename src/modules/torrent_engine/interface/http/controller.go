@@ -24,6 +24,17 @@ func (c *Controller) AddHandler() sharedhttp.HandlerFunc {
 			return
 		}
 
+		if body.Magnet == "" && body.Hash == "" {
+			sharedhttp.ErrorJSON(w, stdhttp.StatusBadRequest, "hash or magnet required")
+			return
+		}
+		if body.Magnet != "" {
+			if _, err := domain.Parse(body.Magnet); err != nil {
+				sharedhttp.ErrorJSON(w, stdhttp.StatusBadRequest, err.Error())
+				return
+			}
+		}
+
 		timeout := time.Duration(config.Get().Torrent.AddTimeoutSeconds) * time.Second
 		tctx, cancel := context.WithTimeout(r.Context(), timeout)
 		defer cancel()
