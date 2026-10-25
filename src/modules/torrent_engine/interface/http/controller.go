@@ -66,6 +66,17 @@ func (c *Controller) DeleteHandler() sharedhttp.HandlerFunc {
 	return func(w stdhttp.ResponseWriter, r *stdhttp.Request) {}
 }
 
+func (c *Controller) ListHandler() sharedhttp.HandlerFunc {
+	return func(w stdhttp.ResponseWriter, r *stdhttp.Request) {
+		items, err := c.service.ListTorrents()
+		if err != nil {
+			sharedhttp.ErrorJSON(w, stdhttp.StatusInternalServerError, err.Error())
+			return
+		}
+		sharedhttp.JSON(w, stdhttp.StatusOK, items)
+	}
+}
+
 func (c *Controller) SearchHandler() sharedhttp.HandlerFunc {
 	return func(w stdhttp.ResponseWriter, r *stdhttp.Request) {
 		if !config.SearchEnabled() {

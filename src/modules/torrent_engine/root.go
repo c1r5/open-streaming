@@ -9,8 +9,8 @@ import (
 	"github.com/c1r5/open-streaming/src/modules/torrent_engine/application"
 	"github.com/c1r5/open-streaming/src/modules/torrent_engine/domain"
 	"github.com/c1r5/open-streaming/src/modules/torrent_engine/infrastructure/cache"
-	torrent_http "github.com/c1r5/open-streaming/src/modules/torrent_engine/interface/http"
 	"github.com/c1r5/open-streaming/src/modules/torrent_engine/infrastructure/persistence"
+	torrent_http "github.com/c1r5/open-streaming/src/modules/torrent_engine/interface/http"
 	"github.com/c1r5/open-streaming/src/shared/config"
 	"gorm.io/gorm"
 )
@@ -60,6 +60,9 @@ func warmUpEngine(eng domain.ITorrentEngine, db *gorm.DB) {
 }
 
 func (m *TorrentModule) registerRoutes() {
+	m.mux.HandleFunc("GET /torrent", func(w http.ResponseWriter, r *http.Request) {
+		m.c.ListHandler()(w, r)
+	})
 	m.mux.HandleFunc("POST /torrent/add", func(w http.ResponseWriter, r *http.Request) {
 		m.c.AddHandler()(w, r)
 	})
