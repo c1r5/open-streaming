@@ -68,6 +68,12 @@ func TestMigrationSplitsMoviesAndSeries(t *testing.T) {
 	)`).Error; err != nil {
 		t.Fatal(err)
 	}
+	if err := db.Exec("CREATE INDEX idx_torrents_deleted_at ON torrents(deleted_at)").Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Exec(`CREATE TABLE torrents_new (id integer PRIMARY KEY AUTOINCREMENT, hash text)`).Error; err != nil {
+		t.Fatal(err)
+	}
 
 	const season = "Series/Big Bang - A Teoria 2006 - 1ª Temporada Completa (720p) Acesse o ORIGINAL WWW.BLUDV.TV"
 	inserts := []string{

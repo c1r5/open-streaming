@@ -48,6 +48,13 @@ func migrateLibrary(db *gorm.DB) error {
 }
 
 func copyLibrary(db *gorm.DB) ([]savedLibrary, error) {
+	// A failed attempt leaves torrents_new behind. Index names are global in
+	// SQLite, so the new table cannot take idx_torrents_deleted_at until the
+	// old torrents table is gone.
+	if err := db.Exec("DROP TABLE IF EXISTS torrents_new").Error; err != nil {
+		return nil, err
+	}
+
 	var rows []storedFile
 	if err := db.Table("torrents").Find(&rows).Error; err != nil {
 		return nil, err
@@ -80,12 +87,6 @@ func copyLibrary(db *gorm.DB) ([]savedLibrary, error) {
 		name TEXT,
 		size INTEGER
 	)`).Error; err != nil {
-		return nil, err
-	}
-	if err := db.Exec("CREATE UNIQUE INDEX idx_torrents_hash ON torrents_new(hash)").Error; err != nil {
-		return nil, err
-	}
-	if err := db.Exec("CREATE INDEX idx_torrents_deleted_at ON torrents_new(deleted_at)").Error; err != nil {
 		return nil, err
 	}
 
@@ -130,6 +131,12 @@ func copyLibrary(db *gorm.DB) ([]savedLibrary, error) {
 		return nil, err
 	}
 	if err := db.Exec("ALTER TABLE torrents_new RENAME TO torrents").Error; err != nil {
+		return nil, err
+	}
+	if err := db.Exec("CREATE UNIQUE INDEX idx_torrents_hash ON torrents(hash)").Error; err != nil {
+		return nil, err
+	}
+	if err := db.Exec("CREATE INDEX idx_torrents_deleted_at ON torrents(deleted_at)").Error; err != nil {
 		return nil, err
 	}
 	return savedRows, nil
