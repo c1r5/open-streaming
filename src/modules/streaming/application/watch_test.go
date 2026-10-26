@@ -16,14 +16,28 @@ func TestGetStreamFile_usesIndexOnlyForPack(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := db.AutoMigrate(&persistence.TorrentModel{}); err != nil {
+	if err := db.AutoMigrate(&persistence.TorrentModel{}, &persistence.MovieModel{}, &persistence.SeriesModel{}, &persistence.EpisodeModel{}); err != nil {
 		t.Fatal(err)
 	}
 
-	bolt := persistence.TorrentModel{Hash: "bolt", FileIndex: 0, TorrentName: "bolt_supercao.mkv", Size: 10}
-	episodeOne := persistence.TorrentModel{Hash: "pack", FileIndex: 3, TorrentName: "S01E01.mkv", Size: 100}
-	episodeTwo := persistence.TorrentModel{Hash: "pack", FileIndex: 7, TorrentName: "S01E02.mkv", Size: 500}
-	for _, row := range []*persistence.TorrentModel{&bolt, &episodeOne, &episodeTwo} {
+	bolt := persistence.TorrentModel{Hash: "bolt", Name: "bolt_supercao.mkv", Size: 10}
+	pack := persistence.TorrentModel{Hash: "pack", Name: "Season", Size: 600}
+	for _, row := range []*persistence.TorrentModel{&bolt, &pack} {
+		if err := db.Create(row).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+	movieRow := persistence.MovieModel{TorrentID: bolt.ID, FileIndex: 0, Size: 10}
+	series := persistence.SeriesModel{TorrentID: pack.ID}
+	if err := db.Create(&movieRow).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Create(&series).Error; err != nil {
+		t.Fatal(err)
+	}
+	episodeOne := persistence.EpisodeModel{SeriesID: series.ID, FileIndex: 3, Name: "S01E01.mkv", Size: 100}
+	episodeTwo := persistence.EpisodeModel{SeriesID: series.ID, FileIndex: 7, Name: "S01E02.mkv", Size: 500}
+	for _, row := range []*persistence.EpisodeModel{&episodeOne, &episodeTwo} {
 		if err := db.Create(row).Error; err != nil {
 			t.Fatal(err)
 		}
@@ -32,7 +46,7 @@ func TestGetStreamFile_usesIndexOnlyForPack(t *testing.T) {
 	engine := &streamEngine{}
 	service := NewService(engine, db)
 
-	movie, err := service.GetStreamFile(bolt.ID)
+	movie, err := service.GetMovieFile(movieRow.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -40,11 +54,11 @@ func TestGetStreamFile_usesIndexOnlyForPack(t *testing.T) {
 		t.Fatalf("movie path %q resolve %d files %#v", movie.Path, engine.resolveCalls, engine.fileCalls)
 	}
 
-	first, err := service.GetStreamFile(episodeOne.ID)
+	first, err := service.GetEpisodeFile(series.ID, episodeOne.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, err := service.GetStreamFile(episodeTwo.ID)
+	second, err := service.GetEpisodeFile(series.ID, episodeTwo.ID)
 	if err != nil {
 		t.Fatal(err)
 	}

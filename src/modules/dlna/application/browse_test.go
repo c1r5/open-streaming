@@ -16,31 +16,41 @@ func TestBrowse_seriesPathAndMoviesStaySeparate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := db.AutoMigrate(&persistence.TorrentModel{}); err != nil {
+	if err := db.AutoMigrate(&persistence.TorrentModel{}, &persistence.MovieModel{}, &persistence.SeriesModel{}, &persistence.EpisodeModel{}); err != nil {
 		t.Fatal(err)
 	}
 
-	const season = "Series/Big Bang - A Teoria 2006 - 1ª Temporada Completa (720p) Acesse o ORIGINAL WWW.BLUDV.TV"
-	episodeOne := persistence.TorrentModel{
-		Hash:        "pack",
-		FileIndex:   3,
-		TorrentName: season + "/The.Big.Bang.Theory.S01E01.720p.BluRay.x264.DUAL-WWW.BLUDV.TV.mkv",
-		Size:        100,
+	const season = "Big Bang - A Teoria 2006 - 1ª Temporada Completa (720p) Acesse o ORIGINAL WWW.BLUDV.TV"
+	pack := persistence.TorrentModel{Hash: "pack", Name: season, Size: 600}
+	looseTorrent := persistence.TorrentModel{Hash: "loose", Name: "Other Show", Size: 40}
+	bolt := persistence.TorrentModel{Hash: "bolt", Name: "bolt_supercao.mkv", Size: 10}
+	for _, row := range []*persistence.TorrentModel{&pack, &looseTorrent, &bolt} {
+		if err := db.Create(row).Error; err != nil {
+			t.Fatal(err)
+		}
 	}
-	episodeTwo := persistence.TorrentModel{
-		Hash:        "pack",
-		FileIndex:   7,
-		TorrentName: season + "/The.Big.Bang.Theory.S01E02.720p.BluRay.x264.DUAL-WWW.BLUDV.TV.mkv",
-		Size:        500,
+	series := persistence.SeriesModel{TorrentID: pack.ID}
+	looseSeries := persistence.SeriesModel{TorrentID: looseTorrent.ID}
+	movie := persistence.MovieModel{TorrentID: bolt.ID, FileIndex: 0, Size: 10}
+	for _, row := range []any{&series, &looseSeries, &movie} {
+		if err := db.Create(row).Error; err != nil {
+			t.Fatal(err)
+		}
 	}
-	loose := persistence.TorrentModel{
-		Hash:        "loose",
-		FileIndex:   1,
-		TorrentName: "Other Show/Episode.S02E03.mkv",
-		Size:        40,
+	episodeOne := persistence.EpisodeModel{
+		SeriesID:  series.ID,
+		FileIndex: 3,
+		Name:      "The.Big.Bang.Theory.S01E01.720p.BluRay.x264.DUAL-WWW.BLUDV.TV.mkv",
+		Size:      100,
 	}
-	bolt := persistence.TorrentModel{Hash: "bolt", FileIndex: 0, TorrentName: "bolt_supercao.mkv", Size: 10}
-	for _, row := range []*persistence.TorrentModel{&episodeTwo, &bolt, &episodeOne, &loose} {
+	episodeTwo := persistence.EpisodeModel{
+		SeriesID:  series.ID,
+		FileIndex: 7,
+		Name:      "The.Big.Bang.Theory.S01E02.720p.BluRay.x264.DUAL-WWW.BLUDV.TV.mkv",
+		Size:      500,
+	}
+	loose := persistence.EpisodeModel{SeriesID: looseSeries.ID, FileIndex: 1, Name: "Episode.S02E03.mkv", Size: 40}
+	for _, row := range []*persistence.EpisodeModel{&episodeTwo, &episodeOne, &loose} {
 		if err := db.Create(row).Error; err != nil {
 			t.Fatal(err)
 		}
@@ -62,16 +72,16 @@ func TestBrowse_seriesPathAndMoviesStaySeparate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(movies) != 1 || itemTitle(t, movies[0]) != "bolt_supercao.mkv" || itemURL(t, movies[0]) != "http://192.168.1.109:3000/stream/watch/"+idOf(bolt.ID) {
+	if len(movies) != 1 || itemTitle(t, movies[0]) != "bolt_supercao.mkv" || itemURL(t, movies[0]) != "http://192.168.1.109:3000/movies/"+idOf(movie.ID)+"/watch" {
 		t.Fatalf("movies %#v", movies)
 	}
 
-	series, err := service.BrowseDirectChildren("/Series", "", "", "")
+	seriesNodes, err := service.BrowseDirectChildren("/Series", "", "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(series) != 2 || containerTitle(t, series[0]) != "Big Bang - A Teoria 2006 - 1ª Temporada Completa (720p) Acesse o ORIGINAL WWW.BLUDV.TV" || containerTitle(t, series[1]) != "Other Show" {
-		t.Fatalf("series folders %#v", titles(series))
+	if len(seriesNodes) != 2 || containerTitle(t, seriesNodes[0]) != "Big Bang - A Teoria 2006 - 1ª Temporada Completa (720p) Acesse o ORIGINAL WWW.BLUDV.TV" || containerTitle(t, seriesNodes[1]) != "Other Show" {
+		t.Fatalf("series folders %#v", titles(seriesNodes))
 	}
 
 	seasonPath := "/Series/Big Bang - A Teoria 2006 - 1ª Temporada Completa (720p) Acesse o ORIGINAL WWW.BLUDV.TV"
@@ -85,7 +95,7 @@ func TestBrowse_seriesPathAndMoviesStaySeparate(t *testing.T) {
 	if itemTitle(t, episodes[0]) != "The.Big.Bang.Theory.S01E01.720p.BluRay.x264.DUAL-WWW.BLUDV.TV.mkv" {
 		t.Fatalf("first episode %q", itemTitle(t, episodes[0]))
 	}
-	if itemURL(t, episodes[0]) != "http://192.168.1.109:3000/stream/watch/"+idOf(episodeOne.ID) {
+	if itemURL(t, episodes[0]) != "http://192.168.1.109:3000/series/"+idOf(series.ID)+"/episodes/"+idOf(episodeOne.ID)+"/watch" {
 		t.Fatalf("watch url %q", itemURL(t, episodes[0]))
 	}
 	if itemID(t, episodes[0]) != seasonPath+"/"+itemTitle(t, episodes[0])+"#"+idOf(episodeOne.ID) {

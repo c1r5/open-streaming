@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"testing"
 	"time"
 
@@ -19,37 +20,44 @@ func TestListHandler_newestFirstAndSkipsRemoved(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := db.AutoMigrate(&persistence.TorrentModel{}); err != nil {
+	if err := db.AutoMigrate(&persistence.TorrentModel{}, &persistence.MovieModel{}, &persistence.SeriesModel{}, &persistence.EpisodeModel{}); err != nil {
 		t.Fatal(err)
 	}
 
-	older := persistence.TorrentModel{Hash: "aaa", TorrentName: "older.mkv", Size: 10}
-	newer := persistence.TorrentModel{Hash: "bbb", TorrentName: "newer.mkv", Size: 20}
-	removed := persistence.TorrentModel{Hash: "ccc", TorrentName: "gone.mkv", Size: 30}
-	imdb := "tt1"
-	newer.IMDB = &imdb
+	older := persistence.TorrentModel{Hash: "aaa", Name: "older.mkv", Size: 10}
+	newer := persistence.TorrentModel{Hash: "bbb", Name: "newer.mkv", Size: 20}
+	removed := persistence.TorrentModel{Hash: "ccc", Name: "gone.mkv", Size: 30}
 	for _, row := range []*persistence.TorrentModel{&older, &newer, &removed} {
+		if err := db.Create(row).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+	imdb := "tt1"
+	olderMovie := persistence.MovieModel{TorrentID: older.ID, Size: 10}
+	newerMovie := persistence.MovieModel{TorrentID: newer.ID, Size: 20, IMDB: &imdb}
+	removedMovie := persistence.MovieModel{TorrentID: removed.ID, Size: 30}
+	for _, row := range []*persistence.MovieModel{&olderMovie, &newerMovie, &removedMovie} {
 		if err := db.Create(row).Error; err != nil {
 			t.Fatal(err)
 		}
 	}
 	db.Model(&older).Update("created_at", time.Date(2024, 1, 2, 0, 0, 0, 0, time.UTC))
 	db.Model(&newer).Update("created_at", time.Date(2024, 3, 4, 0, 0, 0, 0, time.UTC))
-	if err := db.Delete(&removed).Error; err != nil {
+	if err := db.Delete(&removedMovie).Error; err != nil {
 		t.Fatal(err)
 	}
 
 	service := application.NewService(&application.ServiceOptions{DB: db})
 	controller := NewController(service)
-	request := httptest.NewRequest(http.MethodGet, "/torrent", nil)
+	request := httptest.NewRequest(http.MethodGet, "/movies", nil)
 	recorder := httptest.NewRecorder()
-	controller.ListHandler()(recorder, request)
+	controller.MoviesHandler()(recorder, request)
 
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status %d body %s", recorder.Code, recorder.Body.String())
 	}
 
-	var items []application.ListedTorrent
+	var items []application.ListedMovie
 	if err := json.Unmarshal(recorder.Body.Bytes(), &items); err != nil {
 		t.Fatal(err)
 	}
@@ -72,25 +80,36 @@ func TestListHandler_groupsSeasonPack(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := db.AutoMigrate(&persistence.TorrentModel{}); err != nil {
+	if err := db.AutoMigrate(&persistence.TorrentModel{}, &persistence.MovieModel{}, &persistence.SeriesModel{}, &persistence.EpisodeModel{}); err != nil {
 		t.Fatal(err)
 	}
 
-	const season = "Series/Big Bang - A Teoria 2006 - 1ª Temporada Completa (720p) Acesse o ORIGINAL WWW.BLUDV.TV"
-	episodeTwo := persistence.TorrentModel{
-		Hash:        "pack",
-		FileIndex:   7,
-		TorrentName: season + "/The.Big.Bang.Theory.S01E02.720p.BluRay.x264.DUAL-WWW.BLUDV.TV.mkv",
-		Size:        500,
+	const season = "Big Bang - A Teoria 2006 - 1ª Temporada Completa (720p) Acesse o ORIGINAL WWW.BLUDV.TV"
+	pack := persistence.TorrentModel{Hash: "pack", Name: season, Size: 600}
+	bolt := persistence.TorrentModel{Hash: "bolt", Name: "bolt_supercao.mkv", Size: 10}
+	for _, row := range []*persistence.TorrentModel{&pack, &bolt} {
+		if err := db.Create(row).Error; err != nil {
+			t.Fatal(err)
+		}
 	}
-	episodeOne := persistence.TorrentModel{
-		Hash:        "pack",
-		FileIndex:   3,
-		TorrentName: season + "/The.Big.Bang.Theory.S01E01.720p.BluRay.x264.DUAL-WWW.BLUDV.TV.mkv",
-		Size:        100,
+	series := persistence.SeriesModel{TorrentID: pack.ID}
+	if err := db.Create(&series).Error; err != nil {
+		t.Fatal(err)
 	}
-	bolt := persistence.TorrentModel{Hash: "bolt", TorrentName: "bolt_supercao.mkv", Size: 10}
-	for _, row := range []*persistence.TorrentModel{&episodeTwo, &episodeOne, &bolt} {
+	episodeTwo := persistence.EpisodeModel{
+		SeriesID:  series.ID,
+		FileIndex: 7,
+		Name:      "The.Big.Bang.Theory.S01E02.720p.BluRay.x264.DUAL-WWW.BLUDV.TV.mkv",
+		Size:      500,
+	}
+	episodeOne := persistence.EpisodeModel{
+		SeriesID:  series.ID,
+		FileIndex: 3,
+		Name:      "The.Big.Bang.Theory.S01E01.720p.BluRay.x264.DUAL-WWW.BLUDV.TV.mkv",
+		Size:      100,
+	}
+	movie := persistence.MovieModel{TorrentID: bolt.ID, Size: 10}
+	for _, row := range []any{&episodeTwo, &episodeOne, &movie} {
 		if err := db.Create(row).Error; err != nil {
 			t.Fatal(err)
 		}
@@ -99,34 +118,39 @@ func TestListHandler_groupsSeasonPack(t *testing.T) {
 	service := application.NewService(&application.ServiceOptions{DB: db})
 	controller := NewController(service)
 	recorder := httptest.NewRecorder()
-	controller.ListHandler()(recorder, httptest.NewRequest(http.MethodGet, "/torrent", nil))
+	controller.SeriesHandler()(recorder, httptest.NewRequest(http.MethodGet, "/series", nil))
 
-	var items []application.ListedTorrent
-	if err := json.Unmarshal(recorder.Body.Bytes(), &items); err != nil {
+	var seriesItems []application.ListedSeries
+	if err := json.Unmarshal(recorder.Body.Bytes(), &seriesItems); err != nil {
 		t.Fatal(err)
 	}
-	if len(items) != 2 {
-		t.Fatalf("len %d body %s", len(items), recorder.Body.String())
+	if len(seriesItems) != 1 || seriesItems[0].Name != season || seriesItems[0].Size != 600 || seriesItems[0].ID != series.ID {
+		t.Fatalf("series %+v body %s", seriesItems, recorder.Body.String())
 	}
-	var pack, movie application.ListedTorrent
-	for _, item := range items {
-		if item.Name == "bolt_supercao.mkv" {
-			movie = item
-			continue
-		}
-		pack = item
+
+	episodeRecorder := httptest.NewRecorder()
+	episodeRequest := httptest.NewRequest(http.MethodGet, "/series/1/episodes", nil)
+	episodeRequest.SetPathValue("id", strconv.FormatUint(uint64(series.ID), 10))
+	controller.EpisodesHandler()(episodeRecorder, episodeRequest)
+	var episodes []application.ListedEpisode
+	if err := json.Unmarshal(episodeRecorder.Body.Bytes(), &episodes); err != nil {
+		t.Fatal(err)
 	}
-	if pack.Name != "Big Bang - A Teoria 2006 - 1ª Temporada Completa (720p) Acesse o ORIGINAL WWW.BLUDV.TV" || pack.Size != 600 || pack.ID != episodeOne.ID {
-		t.Fatalf("pack %+v", pack)
+	if len(episodes) != 2 || episodes[0].ID != episodeOne.ID || episodes[1].ID != episodeTwo.ID {
+		t.Fatalf("episodes %+v body %s", episodes, episodeRecorder.Body.String())
 	}
-	if len(pack.Episodes) != 2 || pack.Episodes[0].ID != episodeOne.ID || pack.Episodes[1].ID != episodeTwo.ID {
-		t.Fatalf("episodes %+v", pack.Episodes)
+	if episodes[0].Name != "The.Big.Bang.Theory.S01E01.720p.BluRay.x264.DUAL-WWW.BLUDV.TV.mkv" {
+		t.Fatalf("episode name %q", episodes[0].Name)
 	}
-	if pack.Episodes[0].Name != "The.Big.Bang.Theory.S01E01.720p.BluRay.x264.DUAL-WWW.BLUDV.TV.mkv" {
-		t.Fatalf("episode name %q", pack.Episodes[0].Name)
+
+	movieRecorder := httptest.NewRecorder()
+	controller.MoviesHandler()(movieRecorder, httptest.NewRequest(http.MethodGet, "/movies", nil))
+	var movies []application.ListedMovie
+	if err := json.Unmarshal(movieRecorder.Body.Bytes(), &movies); err != nil {
+		t.Fatal(err)
 	}
-	if movie.Name != "bolt_supercao.mkv" || movie.Episodes != nil {
-		t.Fatalf("movie %+v", movie)
+	if len(movies) != 1 || movies[0].Name != "bolt_supercao.mkv" || movies[0].ID != movie.ID {
+		t.Fatalf("movies %+v", movies)
 	}
 }
 
@@ -135,14 +159,14 @@ func TestListHandler_empty(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := db.AutoMigrate(&persistence.TorrentModel{}); err != nil {
+	if err := db.AutoMigrate(&persistence.TorrentModel{}, &persistence.MovieModel{}, &persistence.SeriesModel{}, &persistence.EpisodeModel{}); err != nil {
 		t.Fatal(err)
 	}
 
 	service := application.NewService(&application.ServiceOptions{DB: db})
 	controller := NewController(service)
 	recorder := httptest.NewRecorder()
-	controller.ListHandler()(recorder, httptest.NewRequest(http.MethodGet, "/torrent", nil))
+	controller.MoviesHandler()(recorder, httptest.NewRequest(http.MethodGet, "/movies", nil))
 
 	if recorder.Body.String() != "[]\n" {
 		t.Fatalf("body %q", recorder.Body.String())
