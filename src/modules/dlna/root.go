@@ -43,9 +43,12 @@ func New(db *gorm.DB, cfg *config.Config) (*Module, error) {
 		RootObjectPath:         tmpDir,
 		OnBrowseDirectChildren: svc.BrowseDirectChildren,
 		OnBrowseMetadata:       svc.BrowseMetadata,
-		NoTranscode:            true,
-		NoProbe:                true,
-		NotifyInterval:         30 * time.Second,
+		// anacrolix/dms rejects every ContentDirectory request when this is empty.
+		// The upstream CLI allows every address unless -allowedIps is set.
+		AllowedIpNets:  allowAllIPNets(),
+		NoTranscode:    true,
+		NoProbe:        true,
+		NotifyInterval: 30 * time.Second,
 	}
 
 	if cfg.DLNA.Interface != "" {
@@ -84,6 +87,18 @@ func (m *Module) Stop() {
 	}
 	// Clean up temp dir
 	os.RemoveAll(m.server.RootObjectPath)
+}
+
+func allowAllIPNets() []*net.IPNet {
+	nets := make([]*net.IPNet, 0, 2)
+	for _, cidr := range []string{"0.0.0.0/0", "::/0"} {
+		_, network, err := net.ParseCIDR(cidr)
+		if err != nil {
+			panic(err)
+		}
+		nets = append(nets, network)
+	}
+	return nets
 }
 
 func httpServerAddr(cfg *config.Config) string {
