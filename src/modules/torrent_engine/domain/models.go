@@ -55,6 +55,7 @@ func (t MagnetModel) Magnet() string {
 
 func Parse(magnetURI string) (*MagnetModel, error) {
 	info := &MagnetModel{}
+	magnetURI = normalizeBase32Infohash(magnetURI)
 
 	magnetV1, err := metainfo.ParseMagnetUri(magnetURI)
 	if err != nil {
@@ -83,4 +84,36 @@ func Parse(magnetURI string) (*MagnetModel, error) {
 	}
 
 	return nil, fmt.Errorf("magnet: no valid info hash found")
+}
+
+// normalizeBase32Infohash uppercases 32-character v1 infohashes.
+// encoding/base32 rejects lowercase, and magnet links often use it.
+func normalizeBase32Infohash(uri string) string {
+	u, err := url.Parse(uri)
+	if err != nil {
+		return uri
+	}
+
+	q := u.Query()
+	xts := q["xt"]
+	changed := false
+	for i, xt := range xts {
+		encoded, ok := strings.CutPrefix(xt, "urn:btih:")
+		if !ok || len(encoded) != 32 {
+			continue
+		}
+		upper := strings.ToUpper(encoded)
+		if upper == encoded {
+			continue
+		}
+		xts[i] = "urn:btih:" + upper
+		changed = true
+	}
+	if !changed {
+		return uri
+	}
+
+	q["xt"] = xts
+	u.RawQuery = q.Encode()
+	return u.String()
 }
