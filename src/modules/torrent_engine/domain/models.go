@@ -25,6 +25,7 @@ type TorrentFile struct {
 type ITorrentEngine interface {
 	Resolve(hash string) (*TorrentFile, error)
 	ResolveMagnet(magnet *MagnetModel) (*TorrentFile, error)
+	ResolveFile(hash string, index int) (*TorrentFile, error)
 	ListVideos(magnet *MagnetModel) ([]VideoMeta, error)
 	PersistTorrentFile(hash string) error
 }

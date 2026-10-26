@@ -132,6 +132,10 @@ func (f *fakeEngine) ResolveMagnet(*domain.MagnetModel) (*domain.TorrentFile, er
 	return &domain.TorrentFile{}, nil
 }
 
+func (f *fakeEngine) ResolveFile(string, int) (*domain.TorrentFile, error) {
+	return &domain.TorrentFile{}, nil
+}
+
 func (f *fakeEngine) ListVideos(*domain.MagnetModel) ([]domain.VideoMeta, error) {
 	return f.videos, nil
 }

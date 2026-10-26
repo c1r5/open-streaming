@@ -8,10 +8,11 @@ import (
 
 type TorrentStreamInfo struct {
 	gorm.Model
-	Filename string `gorm:"column:torrent_name"`
-	Hash     string `gorm:"column:hash"`
-	IMDB     string `gorm:"column:imdb"`
-	Size     int64  `gorm:"column:size"`
+	Filename  string `gorm:"column:torrent_name"`
+	Hash      string `gorm:"column:hash"`
+	FileIndex int    `gorm:"column:file_index"`
+	IMDB      string `gorm:"column:imdb"`
+	Size      int64  `gorm:"column:size"`
 }
 
 func (TorrentStreamInfo) TableName() string { return "torrents" }
