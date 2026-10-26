@@ -9,6 +9,7 @@ import (
 const (
 	RootPath   = "/"
 	MoviesPath = "/Movies"
+	SeriesPath = "/Series"
 )
 
 var videoMIME = map[string]string{

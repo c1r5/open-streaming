@@ -82,6 +82,38 @@ func SortVideos(files []VideoMeta) {
 	})
 }
 
+// LibraryPath is the UPnP path of a video. A series file that does not already
+// live under Series gets that prefix.
+func LibraryPath(displayPath string) string {
+	normalized := strings.Trim(strings.ReplaceAll(displayPath, "\\", "/"), "/")
+	lower := strings.ToLower(normalized)
+	if lower != "series" && !strings.HasPrefix(lower, "series/") {
+		normalized = "Series/" + normalized
+	}
+	return "/" + normalized
+}
+
+func HasEpisode(name string) bool {
+	return episodeOf(name).ok
+}
+
+func LessEpisodeName(a, b string) bool {
+	left := episodeOf(a)
+	right := episodeOf(b)
+	if left.ok && right.ok {
+		if left.season != right.season {
+			return left.season < right.season
+		}
+		if left.number != right.number {
+			return left.number < right.number
+		}
+	}
+	if left.ok != right.ok {
+		return left.ok
+	}
+	return a < b
+}
+
 // PackTitle is the season directory shown for a series. A file that already
 // sits at the torrent root, or directly under Series, keeps its own name.
 func PackTitle(displayPath string) string {

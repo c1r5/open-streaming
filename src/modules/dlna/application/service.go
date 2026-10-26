@@ -3,9 +3,9 @@ package application
 import (
 	"fmt"
 	"net/url"
+	"strings"
 	"time"
 
-	"github.com/anacrolix/dms/upnpav"
 	"github.com/c1r5/open-streaming/src/modules/dlna/domain"
 	"gorm.io/gorm"
 )
@@ -31,122 +31,90 @@ func NewService(db *gorm.DB, baseURL string) *Service {
 }
 
 func (s *Service) BrowseDirectChildren(path, rootObjectPath, host, userAgent string) ([]interface{}, error) {
+	movies, series, err := s.loadLibrary()
+	if err != nil {
+		return nil, err
+	}
 	switch path {
 	case domain.RootPath, "":
-		return s.browseRoot()
+		return s.browseRoot(movies, series), nil
 	case domain.MoviesPath:
-		return s.browseMovies(host)
+		return s.browseMovies(movies), nil
 	default:
-		return nil, fmt.Errorf("unknown path: %s", path)
+		if findPlaced(path, series) != nil {
+			return []interface{}{}, nil
+		}
+		if !seriesDir(path, series) {
+			return nil, fmt.Errorf("unknown path: %s", path)
+		}
+		return s.seriesDirectChildren(path, series), nil
 	}
 }
 
 func (s *Service) BrowseMetadata(path, rootObjectPath, host, userAgent string) (interface{}, error) {
+	movies, series, err := s.loadLibrary()
+	if err != nil {
+		return nil, err
+	}
 	switch path {
 	case domain.RootPath, "":
-		return upnpav.Container{
-			Object: upnpav.Object{
-				ID:         "0",
-				ParentID:   "-1",
-				Restricted: 1,
-				Title:      "Root",
-				Class:      "object.container.storageFolder",
-			},
-			ChildCount: 1,
-		}, nil
+		count := 1
+		if len(series) > 0 {
+			count = 2
+		}
+		return s.folderContainer("0", "Root", "-1", count), nil
 	case domain.MoviesPath:
-		count, _ := s.torrentCount()
-		return upnpav.Container{
-			Object: upnpav.Object{
-				ID:         domain.MoviesPath,
-				ParentID:   "0",
-				Restricted: 1,
-				Title:      "Movies",
-				Class:      "object.container.storageFolder",
-			},
-			ChildCount: count,
-		}, nil
+		return s.folderContainer(domain.MoviesPath, "Movies", "0", len(movies)), nil
 	default:
-		return nil, fmt.Errorf("unknown path: %s", path)
-	}
-}
-
-func (s *Service) browseRoot() ([]interface{}, error) {
-	count, _ := s.torrentCount()
-	return []interface{}{
-		upnpav.Container{
-			Object: upnpav.Object{
-				ID:         domain.MoviesPath,
-				ParentID:   "0",
-				Restricted: 1,
-				Title:      "Movies",
-				Class:      "object.container.storageFolder",
-			},
-			ChildCount: count,
-		},
-	}, nil
-}
-
-func (s *Service) browseMovies(host string) ([]interface{}, error) {
-	var rows []torrentRow
-	if err := s.db.Find(&rows).Error; err != nil {
-		return nil, fmt.Errorf("dlna: query torrents: %w", err)
-	}
-
-	objs := make([]interface{}, 0, len(rows))
-	for _, r := range largestRowPerHash(rows) {
-		streamURL := fmt.Sprintf("%s/stream/watch/%d", s.baseURL, r.ID)
-		mimeType := domain.MIMEForPath(r.TorrentName)
-
-		item := upnpav.Item{
-			Object: upnpav.Object{
-				ID:         domain.VirtualPath(r.TorrentName),
-				ParentID:   domain.MoviesPath,
-				Restricted: 1,
-				Title:      r.TorrentName,
-				Class:      "object.item.videoItem",
-				Date:       upnpav.Timestamp{Time: r.CreatedAt},
-			},
-			Res: []upnpav.Resource{
-				{
-					URL:          streamURL,
-					ProtocolInfo: fmt.Sprintf("http-get:*:%s:DLNA.ORG_OP=01;DLNA.ORG_CI=0;DLNA.ORG_FLAGS=01700000000000000000000000000000", mimeType),
-					Size:         uint64(r.Size),
-				},
-			},
+		if item := findPlaced(path, series); item != nil {
+			return s.videoItem(
+				itemObjectID(*item),
+				item.dir,
+				item.base,
+				fmt.Sprintf("%s/stream/watch/%d", s.baseURL, item.row.ID),
+				domain.MIMEForPath(item.base),
+				item.row,
+			), nil
 		}
-		objs = append(objs, item)
+		if !seriesDir(path, series) {
+			return nil, fmt.Errorf("unknown path: %s", path)
+		}
+		folders, items := seriesChildren(path, series)
+		title := path
+		if path != domain.SeriesPath {
+			title = path[strings.LastIndex(path, "/")+1:]
+		} else {
+			title = "Series"
+		}
+		return s.folderContainer(path, title, containerParent(path), len(folders)+len(items)), nil
 	}
-	return objs, nil
 }
 
-func (s *Service) torrentCount() (int, error) {
-	var count int64
-	if err := s.db.Table("torrents").Where("deleted_at IS NULL").Count(&count).Error; err != nil {
-		return 0, err
+func (s *Service) browseRoot(movies []torrentRow, series []placedVideo) []interface{} {
+	root := []interface{}{
+		s.folderContainer(domain.MoviesPath, "Movies", "0", len(movies)),
 	}
-	return int(count), nil
+	if len(series) == 0 {
+		return root
+	}
+	folders, items := seriesChildren(domain.SeriesPath, series)
+	root = append(root, s.folderContainer(domain.SeriesPath, "Series", "0", len(folders)+len(items)))
+	return root
 }
 
-func largestRowPerHash(rows []torrentRow) []torrentRow {
-	best := make(map[string]torrentRow, len(rows))
-	order := make([]string, 0, len(rows))
-	for _, row := range rows {
-		current, ok := best[row.Hash]
-		if !ok {
-			best[row.Hash] = row
-			order = append(order, row.Hash)
-			continue
-		}
-		if row.Size > current.Size || (row.Size == current.Size && row.FileIndex < current.FileIndex) {
-			best[row.Hash] = row
-		}
+func (s *Service) browseMovies(movies []torrentRow) []interface{} {
+	objs := make([]interface{}, 0, len(movies))
+	for _, row := range movies {
+		objs = append(objs, s.videoItem(
+			domain.VirtualPath(row.TorrentName),
+			domain.MoviesPath,
+			row.TorrentName,
+			fmt.Sprintf("%s/stream/watch/%d", s.baseURL, row.ID),
+			domain.MIMEForPath(row.TorrentName),
+			row,
+		))
 	}
-	out := make([]torrentRow, 0, len(order))
-	for _, hash := range order {
-		out = append(out, best[hash])
-	}
-	return out
+	return objs
 }
 
 func StreamBaseURL(host string, port string) string {
