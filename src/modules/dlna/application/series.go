@@ -10,6 +10,7 @@ import (
 	"github.com/anacrolix/dms/upnpav"
 	"github.com/c1r5/open-streaming/src/modules/dlna/domain"
 	torrentdomain "github.com/c1r5/open-streaming/src/modules/torrent_engine/domain"
+	"github.com/c1r5/open-streaming/src/modules/torrent_engine/infrastructure/persistence"
 )
 
 type placedVideo struct {
@@ -20,44 +21,38 @@ type placedVideo struct {
 }
 
 func (s *Service) loadLibrary() (movies []torrentRow, series []placedVideo, err error) {
-	var rows []torrentRow
-	if err = s.db.Where("deleted_at IS NULL").Find(&rows).Error; err != nil {
-		return nil, nil, fmt.Errorf("dlna: query torrents: %w", err)
+	var movieRows []persistence.MovieModel
+	if err = s.db.Preload("Torrent").Find(&movieRows).Error; err != nil {
+		return nil, nil, fmt.Errorf("dlna: query movies: %w", err)
+	}
+	for _, movie := range movieRows {
+		movies = append(movies, torrentRow{
+			ID:        torrentdomain.MovieWatchID(movie.ID),
+			Title:     movie.Torrent.Name,
+			Size:      movie.Size,
+			CreatedAt: movie.Torrent.CreatedAt,
+		})
 	}
 
-	grouped := map[string][]torrentRow{}
-	order := make([]string, 0)
-	for _, row := range rows {
-		if _, ok := grouped[row.Hash]; !ok {
-			order = append(order, row.Hash)
-		}
-		grouped[row.Hash] = append(grouped[row.Hash], row)
+	var episodes []persistence.EpisodeModel
+	if err = s.db.Preload("Series.Torrent").Find(&episodes).Error; err != nil {
+		return nil, nil, fmt.Errorf("dlna: query episodes: %w", err)
 	}
-
-	for _, hash := range order {
-		group := grouped[hash]
-		if !isSeriesGroup(group) {
-			movies = append(movies, group[0])
-			continue
-		}
-		for _, row := range group {
-			full := torrentdomain.LibraryPath(row.TorrentName)
-			series = append(series, placedVideo{
-				row:  row,
-				full: full,
-				dir:  path.Dir(full),
-				base: path.Base(full),
-			})
-		}
+	for _, episode := range episodes {
+		full := torrentdomain.LibraryPath(episode.Series.Torrent.Name + "/" + episode.Name)
+		series = append(series, placedVideo{
+			row: torrentRow{
+				ID:        torrentdomain.EpisodeWatchID(episode.ID),
+				Title:     episode.Name,
+				Size:      episode.Size,
+				CreatedAt: episode.CreatedAt,
+			},
+			full: full,
+			dir:  path.Dir(full),
+			base: path.Base(full),
+		})
 	}
 	return movies, series, nil
-}
-
-func isSeriesGroup(group []torrentRow) bool {
-	if len(group) > 1 {
-		return true
-	}
-	return len(group) == 1 && torrentdomain.HasEpisode(group[0].TorrentName)
 }
 
 func seriesChildren(parent string, series []placedVideo) (folders []string, items []placedVideo) {

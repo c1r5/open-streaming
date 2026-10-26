@@ -6,6 +6,7 @@ import (
 
 	streamdomain "github.com/c1r5/open-streaming/src/modules/streaming/domain"
 	enginedomain "github.com/c1r5/open-streaming/src/modules/torrent_engine/domain"
+	"github.com/c1r5/open-streaming/src/modules/torrent_engine/infrastructure/persistence"
 	"gorm.io/gorm"
 )
 
@@ -19,18 +20,31 @@ func NewService(eng enginedomain.ITorrentEngine, db *gorm.DB) *Service {
 }
 
 func (s *Service) GetStreamInfo(id uint) (*streamdomain.TorrentStreamInfo, error) {
-	return s.byId(id)
+	media, err := s.lookup(id)
+	if err != nil {
+		return nil, err
+	}
+	return &streamdomain.TorrentStreamInfo{
+		Filename: media.filename,
+		Hash:     media.hash,
+		IMDB:     media.imdb,
+		Size:     media.size,
+	}, nil
 }
 
 func (s *Service) GetStreamFile(id uint) (*streamdomain.TorrentStreamFile, error) {
-	record, err := s.byId(id)
-
+	media, err := s.lookup(id)
 	if err != nil {
 		return nil, err
 	}
 
-	log.Printf("service: resolving stream id=%d hash=%s", id, record.Hash)
-	file, err := s.open(record)
+	log.Printf("service: resolving stream id=%d hash=%s episode=%t", id, media.hash, media.episode)
+	var file *enginedomain.TorrentFile
+	if media.episode {
+		file, err = s.engine.ResolveFile(media.hash, media.fileIndex)
+	} else {
+		file, err = s.engine.Resolve(media.hash)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -42,21 +56,51 @@ func (s *Service) GetStreamFile(id uint) (*streamdomain.TorrentStreamFile, error
 	}, nil
 }
 
-func (s *Service) open(record *streamdomain.TorrentStreamInfo) (*enginedomain.TorrentFile, error) {
-	var siblings int64
-	if err := s.db.Model(&streamdomain.TorrentStreamInfo{}).Where("hash = ?", record.Hash).Count(&siblings).Error; err != nil {
-		return nil, err
-	}
-	if siblings > 1 {
-		return s.engine.ResolveFile(record.Hash, record.FileIndex)
-	}
-	return s.engine.Resolve(record.Hash)
+type streamMedia struct {
+	filename  string
+	hash      string
+	imdb      string
+	size      int64
+	fileIndex int
+	episode   bool
 }
 
-func (s *Service) byId(id uint) (*streamdomain.TorrentStreamInfo, error) {
-	var record streamdomain.TorrentStreamInfo
-	if err := s.db.First(&record, id).Error; err != nil {
+func (s *Service) lookup(id uint) (*streamMedia, error) {
+	episode, real := enginedomain.ParseWatchID(id)
+	if real == 0 {
+		return nil, fmt.Errorf("streaming -> torrent not found")
+	}
+	if episode {
+		var row persistence.EpisodeModel
+		if err := s.db.Preload("Series.Torrent").First(&row, real).Error; err != nil {
+			return nil, fmt.Errorf("streaming -> torrent not found -> %w", err)
+		}
+		imdb := ""
+		if row.Series.IMDB != nil {
+			imdb = *row.Series.IMDB
+		}
+		return &streamMedia{
+			filename:  row.Name,
+			hash:      row.Series.Torrent.Hash,
+			imdb:      imdb,
+			size:      row.Size,
+			fileIndex: row.FileIndex,
+			episode:   true,
+		}, nil
+	}
+
+	var movie persistence.MovieModel
+	if err := s.db.Preload("Torrent").First(&movie, real).Error; err != nil {
 		return nil, fmt.Errorf("streaming -> torrent not found -> %w", err)
 	}
-	return &record, nil
+	imdb := ""
+	if movie.IMDB != nil {
+		imdb = *movie.IMDB
+	}
+	return &streamMedia{
+		filename: movie.Torrent.Name,
+		hash:     movie.Torrent.Hash,
+		imdb:     imdb,
+		size:     movie.Size,
+	}, nil
 }

@@ -1,21 +1,13 @@
 package domain
 
-import (
-	"io"
-
-	"gorm.io/gorm"
-)
+import "io"
 
 type TorrentStreamInfo struct {
-	gorm.Model
-	Filename  string `gorm:"column:torrent_name"`
-	Hash      string `gorm:"column:hash"`
-	FileIndex int    `gorm:"column:file_index"`
-	IMDB      string `gorm:"column:imdb"`
-	Size      int64  `gorm:"column:size"`
+	Filename string
+	Hash     string
+	IMDB     string
+	Size     int64
 }
-
-func (TorrentStreamInfo) TableName() string { return "torrents" }
 
 type TorrentStreamFile struct {
 	Path   string

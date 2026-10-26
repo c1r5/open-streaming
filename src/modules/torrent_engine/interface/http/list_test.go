@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/c1r5/open-streaming/src/modules/torrent_engine/application"
+	"github.com/c1r5/open-streaming/src/modules/torrent_engine/domain"
 	"github.com/c1r5/open-streaming/src/modules/torrent_engine/infrastructure/persistence"
 	_ "github.com/ncruces/go-sqlite3/embed"
 	"github.com/ncruces/go-sqlite3/gormlite"
@@ -19,23 +20,30 @@ func TestListHandler_newestFirstAndSkipsRemoved(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := db.AutoMigrate(&persistence.TorrentModel{}); err != nil {
+	if err := db.AutoMigrate(&persistence.TorrentModel{}, &persistence.MovieModel{}, &persistence.SeriesModel{}, &persistence.EpisodeModel{}); err != nil {
 		t.Fatal(err)
 	}
 
-	older := persistence.TorrentModel{Hash: "aaa", TorrentName: "older.mkv", Size: 10}
-	newer := persistence.TorrentModel{Hash: "bbb", TorrentName: "newer.mkv", Size: 20}
-	removed := persistence.TorrentModel{Hash: "ccc", TorrentName: "gone.mkv", Size: 30}
-	imdb := "tt1"
-	newer.IMDB = &imdb
+	older := persistence.TorrentModel{Hash: "aaa", Name: "older.mkv", Size: 10}
+	newer := persistence.TorrentModel{Hash: "bbb", Name: "newer.mkv", Size: 20}
+	removed := persistence.TorrentModel{Hash: "ccc", Name: "gone.mkv", Size: 30}
 	for _, row := range []*persistence.TorrentModel{&older, &newer, &removed} {
+		if err := db.Create(row).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+	imdb := "tt1"
+	olderMovie := persistence.MovieModel{TorrentID: older.ID, Size: 10}
+	newerMovie := persistence.MovieModel{TorrentID: newer.ID, Size: 20, IMDB: &imdb}
+	removedMovie := persistence.MovieModel{TorrentID: removed.ID, Size: 30}
+	for _, row := range []*persistence.MovieModel{&olderMovie, &newerMovie, &removedMovie} {
 		if err := db.Create(row).Error; err != nil {
 			t.Fatal(err)
 		}
 	}
 	db.Model(&older).Update("created_at", time.Date(2024, 1, 2, 0, 0, 0, 0, time.UTC))
 	db.Model(&newer).Update("created_at", time.Date(2024, 3, 4, 0, 0, 0, 0, time.UTC))
-	if err := db.Delete(&removed).Error; err != nil {
+	if err := db.Delete(&removedMovie).Error; err != nil {
 		t.Fatal(err)
 	}
 
@@ -72,25 +80,36 @@ func TestListHandler_groupsSeasonPack(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := db.AutoMigrate(&persistence.TorrentModel{}); err != nil {
+	if err := db.AutoMigrate(&persistence.TorrentModel{}, &persistence.MovieModel{}, &persistence.SeriesModel{}, &persistence.EpisodeModel{}); err != nil {
 		t.Fatal(err)
 	}
 
-	const season = "Series/Big Bang - A Teoria 2006 - 1ª Temporada Completa (720p) Acesse o ORIGINAL WWW.BLUDV.TV"
-	episodeTwo := persistence.TorrentModel{
-		Hash:        "pack",
-		FileIndex:   7,
-		TorrentName: season + "/The.Big.Bang.Theory.S01E02.720p.BluRay.x264.DUAL-WWW.BLUDV.TV.mkv",
-		Size:        500,
+	const season = "Big Bang - A Teoria 2006 - 1ª Temporada Completa (720p) Acesse o ORIGINAL WWW.BLUDV.TV"
+	pack := persistence.TorrentModel{Hash: "pack", Name: season, Size: 600}
+	bolt := persistence.TorrentModel{Hash: "bolt", Name: "bolt_supercao.mkv", Size: 10}
+	for _, row := range []*persistence.TorrentModel{&pack, &bolt} {
+		if err := db.Create(row).Error; err != nil {
+			t.Fatal(err)
+		}
 	}
-	episodeOne := persistence.TorrentModel{
-		Hash:        "pack",
-		FileIndex:   3,
-		TorrentName: season + "/The.Big.Bang.Theory.S01E01.720p.BluRay.x264.DUAL-WWW.BLUDV.TV.mkv",
-		Size:        100,
+	series := persistence.SeriesModel{TorrentID: pack.ID}
+	if err := db.Create(&series).Error; err != nil {
+		t.Fatal(err)
 	}
-	bolt := persistence.TorrentModel{Hash: "bolt", TorrentName: "bolt_supercao.mkv", Size: 10}
-	for _, row := range []*persistence.TorrentModel{&episodeTwo, &episodeOne, &bolt} {
+	episodeTwo := persistence.EpisodeModel{
+		SeriesID:  series.ID,
+		FileIndex: 7,
+		Name:      "The.Big.Bang.Theory.S01E02.720p.BluRay.x264.DUAL-WWW.BLUDV.TV.mkv",
+		Size:      500,
+	}
+	episodeOne := persistence.EpisodeModel{
+		SeriesID:  series.ID,
+		FileIndex: 3,
+		Name:      "The.Big.Bang.Theory.S01E01.720p.BluRay.x264.DUAL-WWW.BLUDV.TV.mkv",
+		Size:      100,
+	}
+	movie := persistence.MovieModel{TorrentID: bolt.ID, Size: 10}
+	for _, row := range []any{&episodeTwo, &episodeOne, &movie} {
 		if err := db.Create(row).Error; err != nil {
 			t.Fatal(err)
 		}
@@ -108,25 +127,25 @@ func TestListHandler_groupsSeasonPack(t *testing.T) {
 	if len(items) != 2 {
 		t.Fatalf("len %d body %s", len(items), recorder.Body.String())
 	}
-	var pack, movie application.ListedTorrent
+	var packItem, movieItem application.ListedTorrent
 	for _, item := range items {
 		if item.Name == "bolt_supercao.mkv" {
-			movie = item
+			movieItem = item
 			continue
 		}
-		pack = item
+		packItem = item
 	}
-	if pack.Name != "Big Bang - A Teoria 2006 - 1ª Temporada Completa (720p) Acesse o ORIGINAL WWW.BLUDV.TV" || pack.Size != 600 || pack.ID != episodeOne.ID {
-		t.Fatalf("pack %+v", pack)
+	if packItem.Name != season || packItem.Size != 600 || packItem.ID != domain.EpisodeWatchID(episodeOne.ID) {
+		t.Fatalf("pack %+v", packItem)
 	}
-	if len(pack.Episodes) != 2 || pack.Episodes[0].ID != episodeOne.ID || pack.Episodes[1].ID != episodeTwo.ID {
-		t.Fatalf("episodes %+v", pack.Episodes)
+	if len(packItem.Episodes) != 2 || packItem.Episodes[0].ID != domain.EpisodeWatchID(episodeOne.ID) || packItem.Episodes[1].ID != domain.EpisodeWatchID(episodeTwo.ID) {
+		t.Fatalf("episodes %+v", packItem.Episodes)
 	}
-	if pack.Episodes[0].Name != "The.Big.Bang.Theory.S01E01.720p.BluRay.x264.DUAL-WWW.BLUDV.TV.mkv" {
-		t.Fatalf("episode name %q", pack.Episodes[0].Name)
+	if packItem.Episodes[0].Name != "The.Big.Bang.Theory.S01E01.720p.BluRay.x264.DUAL-WWW.BLUDV.TV.mkv" {
+		t.Fatalf("episode name %q", packItem.Episodes[0].Name)
 	}
-	if movie.Name != "bolt_supercao.mkv" || movie.Episodes != nil {
-		t.Fatalf("movie %+v", movie)
+	if movieItem.Name != "bolt_supercao.mkv" || movieItem.Episodes != nil {
+		t.Fatalf("movie %+v", movieItem)
 	}
 }
 
@@ -135,7 +154,7 @@ func TestListHandler_empty(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := db.AutoMigrate(&persistence.TorrentModel{}); err != nil {
+	if err := db.AutoMigrate(&persistence.TorrentModel{}, &persistence.MovieModel{}, &persistence.SeriesModel{}, &persistence.EpisodeModel{}); err != nil {
 		t.Fatal(err)
 	}
 

@@ -11,15 +11,11 @@ import (
 )
 
 type torrentRow struct {
-	ID          uint
-	FileIndex   int
-	TorrentName string
-	Hash        string
-	Size        int64
-	CreatedAt   time.Time
+	ID        uint
+	Title     string
+	Size      int64
+	CreatedAt time.Time
 }
-
-func (torrentRow) TableName() string { return "torrents" }
 
 type Service struct {
 	db      *gorm.DB
@@ -106,11 +102,11 @@ func (s *Service) browseMovies(movies []torrentRow) []interface{} {
 	objs := make([]interface{}, 0, len(movies))
 	for _, row := range movies {
 		objs = append(objs, s.videoItem(
-			domain.VirtualPath(row.TorrentName),
+			domain.VirtualPath(row.Title),
 			domain.MoviesPath,
-			row.TorrentName,
+			row.Title,
 			fmt.Sprintf("%s/stream/watch/%d", s.baseURL, row.ID),
-			domain.MIMEForPath(row.TorrentName),
+			domain.MIMEForPath(row.Title),
 			row,
 		))
 	}

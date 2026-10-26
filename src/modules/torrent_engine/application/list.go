@@ -1,8 +1,7 @@
 package application
 
 import (
-	"path"
-	"strings"
+	"sort"
 	"time"
 
 	"github.com/c1r5/open-streaming/src/modules/torrent_engine/domain"
@@ -25,92 +24,70 @@ type ListedTorrent struct {
 }
 
 func (s *Service) ListTorrents() ([]ListedTorrent, error) {
-	var rows []persistence.TorrentModel
-	if err := s.db.Order("created_at DESC").Find(&rows).Error; err != nil {
+	var movies []persistence.MovieModel
+	if err := s.db.Preload("Torrent").Find(&movies).Error; err != nil {
+		return nil, err
+	}
+	var series []persistence.SeriesModel
+	if err := s.db.Preload("Torrent").Preload("Episodes").Find(&series).Error; err != nil {
 		return nil, err
 	}
 
-	grouped := map[string][]persistence.TorrentModel{}
-	order := make([]string, 0)
-	for _, row := range rows {
-		if _, ok := grouped[row.Hash]; !ok {
-			order = append(order, row.Hash)
+	items := make([]ListedTorrent, 0, len(movies)+len(series))
+	for _, movie := range movies {
+		imdb := ""
+		if movie.IMDB != nil {
+			imdb = *movie.IMDB
 		}
-		grouped[row.Hash] = append(grouped[row.Hash], row)
+		items = append(items, ListedTorrent{
+			ID:        domain.MovieWatchID(movie.ID),
+			Name:      movie.Torrent.Name,
+			Size:      movie.Size,
+			CreatedAt: movie.Torrent.CreatedAt,
+			IMDB:      imdb,
+		})
 	}
-
-	items := make([]ListedTorrent, 0, len(order))
-	for _, hash := range order {
-		group := grouped[hash]
-		if isSeriesGroup(group) {
-			items = append(items, seriesItem(group))
-			continue
+	for _, item := range series {
+		imdb := ""
+		if item.IMDB != nil {
+			imdb = *item.IMDB
 		}
-		items = append(items, movieItem(group[0]))
+		episodes := episodesOf(item.Episodes)
+		id := uint(0)
+		if len(episodes) > 0 {
+			id = episodes[0].ID
+		}
+		items = append(items, ListedTorrent{
+			ID:        id,
+			Name:      item.Torrent.Name,
+			Size:      item.Torrent.Size,
+			CreatedAt: item.Torrent.CreatedAt,
+			IMDB:      imdb,
+			Episodes:  episodes,
+		})
 	}
+	sort.SliceStable(items, func(i, j int) bool {
+		return items[i].CreatedAt.After(items[j].CreatedAt)
+	})
 	return items, nil
 }
 
-func isSeriesGroup(group []persistence.TorrentModel) bool {
-	if len(group) > 1 {
-		return true
-	}
-	return len(group) == 1 && domain.HasEpisode(group[0].TorrentName)
-}
-
-func movieItem(row persistence.TorrentModel) ListedTorrent {
-	imdb := ""
-	if row.IMDB != nil {
-		imdb = *row.IMDB
-	}
-	return ListedTorrent{
-		ID:        row.ID,
-		Name:      row.TorrentName,
-		Size:      row.Size,
-		CreatedAt: row.CreatedAt,
-		IMDB:      imdb,
-	}
-}
-
-func seriesItem(group []persistence.TorrentModel) ListedTorrent {
-	videos := make([]domain.VideoMeta, 0, len(group))
-	byIndex := make(map[int]persistence.TorrentModel, len(group))
-	var newest time.Time
-	imdb := ""
-	for _, row := range group {
-		videos = append(videos, domain.VideoMeta{
-			Index: row.FileIndex,
-			Name:  row.TorrentName,
-			Size:  row.Size,
-		})
+func episodesOf(rows []persistence.EpisodeModel) []ListedEpisode {
+	videos := make([]domain.VideoMeta, 0, len(rows))
+	byIndex := make(map[int]persistence.EpisodeModel, len(rows))
+	for _, row := range rows {
+		videos = append(videos, domain.VideoMeta{Index: row.FileIndex, Name: row.Name, Size: row.Size})
 		byIndex[row.FileIndex] = row
-		if row.CreatedAt.After(newest) {
-			newest = row.CreatedAt
-		}
-		if imdb == "" && row.IMDB != nil {
-			imdb = *row.IMDB
-		}
 	}
 	domain.SortVideos(videos)
-
 	episodes := make([]ListedEpisode, 0, len(videos))
-	var size int64
-	var firstID uint
 	for _, video := range videos {
 		row := byIndex[video.Index]
-		base := path.Base(strings.ReplaceAll(row.TorrentName, "\\", "/"))
-		episodes = append(episodes, ListedEpisode{ID: row.ID, Name: base, Size: row.Size})
-		size += row.Size
-		if firstID == 0 {
-			firstID = row.ID
-		}
+		episodes = append(episodes, ListedEpisode{
+			ID:   domain.EpisodeWatchID(row.ID),
+			Name: row.Name,
+			Size: row.Size,
+		})
 	}
-	return ListedTorrent{
-		ID:        firstID,
-		Name:      domain.PackTitle(videos[0].Name),
-		Size:      size,
-		CreatedAt: newest,
-		IMDB:      imdb,
-		Episodes:  episodes,
-	}
+	return episodes
 }

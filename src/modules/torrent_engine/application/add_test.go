@@ -39,21 +39,27 @@ func TestAddTorrent_storesEachVideoAndKeepsOneListEntry(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	var rows []persistence.TorrentModel
-	if err := db.Where("hash = ?", packHash).Order("file_index").Find(&rows).Error; err != nil {
+	var torrent persistence.TorrentModel
+	if err := db.Where("hash = ?", packHash).First(&torrent).Error; err != nil {
 		t.Fatal(err)
 	}
-	if len(rows) != 2 {
-		t.Fatalf("rows %d, want 2 (sample excluded)", len(rows))
+	const season = "Big Bang - A Teoria 2006 - 1ª Temporada Completa (720p) Acesse o ORIGINAL WWW.BLUDV.TV"
+	if torrent.Name != season || torrent.Size != 600 {
+		t.Fatalf("torrent %+v", torrent)
 	}
-	if rows[0].FileIndex != 3 || rows[0].Size != 100 || rows[0].OutputPath != "/data/e01.mkv" {
-		t.Fatalf("first stored file %+v", rows[0])
+	var series persistence.SeriesModel
+	if err := db.Where("torrent_id = ?", torrent.ID).First(&series).Error; err != nil {
+		t.Fatal(err)
 	}
-	if rows[1].FileIndex != 7 || rows[1].Size != 500 {
-		t.Fatalf("second stored file %+v", rows[1])
+	var episodes []persistence.EpisodeModel
+	if err := db.Where("series_id = ?", series.ID).Order("file_index").Find(&episodes).Error; err != nil {
+		t.Fatal(err)
 	}
-	if rows[0].ID != firstID {
-		t.Fatalf("add id %d, want first episode %d", firstID, rows[0].ID)
+	if len(episodes) != 2 || episodes[0].FileIndex != 3 || episodes[0].Size != 100 || episodes[1].FileIndex != 7 || episodes[1].Size != 500 {
+		t.Fatalf("episodes %+v", episodes)
+	}
+	if domain.EpisodeWatchID(episodes[0].ID) != firstID {
+		t.Fatalf("add id %d, want first episode watch id %d", firstID, domain.EpisodeWatchID(episodes[0].ID))
 	}
 	if len(engine.persisted) != 1 || engine.persisted[0] != packHash {
 		t.Fatalf("persisted %#v", engine.persisted)
@@ -72,7 +78,7 @@ func TestAddTorrent_storesEachVideoAndKeepsOneListEntry(t *testing.T) {
 	if err := db.Model(&persistence.TorrentModel{}).Where("hash = ?", packHash).Count(&count).Error; err != nil {
 		t.Fatal(err)
 	}
-	if count != 2 {
+	if count != 1 {
 		t.Fatalf("count after second add %d", count)
 	}
 
@@ -80,16 +86,20 @@ func TestAddTorrent_storesEachVideoAndKeepsOneListEntry(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(listed) != 1 || listed[0].Size != 600 || listed[0].ID != rows[0].ID || len(listed[0].Episodes) != 2 {
+	if len(listed) != 1 || listed[0].Size != 600 || listed[0].ID != firstID || len(listed[0].Episodes) != 2 {
 		t.Fatalf("list %+v, want one pack with both episodes", listed)
 	}
-	if listed[0].Name != "Big Bang - A Teoria 2006 - 1ª Temporada Completa (720p) Acesse o ORIGINAL WWW.BLUDV.TV" {
+	if listed[0].Name != season {
 		t.Fatalf("pack title %q", listed[0].Name)
 	}
 
 	const movieHash = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-	legacy := persistence.TorrentModel{Hash: movieHash, FileIndex: 0, TorrentName: "old.mkv", Size: 1}
+	legacy := persistence.TorrentModel{Hash: movieHash, Name: "old.mkv", Size: 1}
 	if err := db.Create(&legacy).Error; err != nil {
+		t.Fatal(err)
+	}
+	legacyMovie := persistence.MovieModel{TorrentID: legacy.ID, FileIndex: 0, Size: 1}
+	if err := db.Create(&legacyMovie).Error; err != nil {
 		t.Fatal(err)
 	}
 	engine.videos = []domain.VideoMeta{{
@@ -104,15 +114,19 @@ func TestAddTorrent_storesEachVideoAndKeepsOneListEntry(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if movieID != legacy.ID {
-		t.Fatalf("movie id %d, want legacy row %d", movieID, legacy.ID)
+	if movieID != domain.MovieWatchID(legacyMovie.ID) {
+		t.Fatalf("movie id %d, want watch id %d", movieID, domain.MovieWatchID(legacyMovie.ID))
 	}
-	var movie persistence.TorrentModel
-	if err := db.First(&movie, legacy.ID).Error; err != nil {
+	var movie persistence.MovieModel
+	if err := db.First(&movie, legacyMovie.ID).Error; err != nil {
 		t.Fatal(err)
 	}
-	if movie.FileIndex != 4 || movie.TorrentName != "bolt_supercao.mkv" || movie.Size != 539402598 {
-		t.Fatalf("updated movie %+v", movie)
+	var updated persistence.TorrentModel
+	if err := db.First(&updated, legacy.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if movie.FileIndex != 4 || movie.Size != 539402598 || updated.Name != "bolt_supercao.mkv" || updated.Size != 539402598 {
+		t.Fatalf("updated movie %+v torrent %+v", movie, updated)
 	}
 	if err := db.Model(&persistence.TorrentModel{}).Where("hash = ?", movieHash).Count(&count).Error; err != nil {
 		t.Fatal(err)
@@ -154,7 +168,7 @@ func openTestDB(t *testing.T) *gorm.DB {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := db.AutoMigrate(&persistence.TorrentModel{}); err != nil {
+	if err := db.AutoMigrate(&persistence.TorrentModel{}, &persistence.MovieModel{}, &persistence.SeriesModel{}, &persistence.EpisodeModel{}); err != nil {
 		t.Fatal(err)
 	}
 	return db
