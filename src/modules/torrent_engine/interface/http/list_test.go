@@ -67,6 +67,69 @@ func TestListHandler_newestFirstAndSkipsRemoved(t *testing.T) {
 	}
 }
 
+func TestListHandler_groupsSeasonPack(t *testing.T) {
+	db, err := gorm.Open(gormlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AutoMigrate(&persistence.TorrentModel{}); err != nil {
+		t.Fatal(err)
+	}
+
+	const season = "Series/Big Bang - A Teoria 2006 - 1ª Temporada Completa (720p) Acesse o ORIGINAL WWW.BLUDV.TV"
+	episodeTwo := persistence.TorrentModel{
+		Hash:        "pack",
+		FileIndex:   7,
+		TorrentName: season + "/The.Big.Bang.Theory.S01E02.720p.BluRay.x264.DUAL-WWW.BLUDV.TV.mkv",
+		Size:        500,
+	}
+	episodeOne := persistence.TorrentModel{
+		Hash:        "pack",
+		FileIndex:   3,
+		TorrentName: season + "/The.Big.Bang.Theory.S01E01.720p.BluRay.x264.DUAL-WWW.BLUDV.TV.mkv",
+		Size:        100,
+	}
+	bolt := persistence.TorrentModel{Hash: "bolt", TorrentName: "bolt_supercao.mkv", Size: 10}
+	for _, row := range []*persistence.TorrentModel{&episodeTwo, &episodeOne, &bolt} {
+		if err := db.Create(row).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	service := application.NewService(&application.ServiceOptions{DB: db})
+	controller := NewController(service)
+	recorder := httptest.NewRecorder()
+	controller.ListHandler()(recorder, httptest.NewRequest(http.MethodGet, "/torrent", nil))
+
+	var items []application.ListedTorrent
+	if err := json.Unmarshal(recorder.Body.Bytes(), &items); err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 2 {
+		t.Fatalf("len %d body %s", len(items), recorder.Body.String())
+	}
+	var pack, movie application.ListedTorrent
+	for _, item := range items {
+		if item.Name == "bolt_supercao.mkv" {
+			movie = item
+			continue
+		}
+		pack = item
+	}
+	if pack.Name != "Big Bang - A Teoria 2006 - 1ª Temporada Completa (720p) Acesse o ORIGINAL WWW.BLUDV.TV" || pack.Size != 600 || pack.ID != episodeOne.ID {
+		t.Fatalf("pack %+v", pack)
+	}
+	if len(pack.Episodes) != 2 || pack.Episodes[0].ID != episodeOne.ID || pack.Episodes[1].ID != episodeTwo.ID {
+		t.Fatalf("episodes %+v", pack.Episodes)
+	}
+	if pack.Episodes[0].Name != "The.Big.Bang.Theory.S01E01.720p.BluRay.x264.DUAL-WWW.BLUDV.TV.mkv" {
+		t.Fatalf("episode name %q", pack.Episodes[0].Name)
+	}
+	if movie.Name != "bolt_supercao.mkv" || movie.Episodes != nil {
+		t.Fatalf("movie %+v", movie)
+	}
+}
+
 func TestListHandler_empty(t *testing.T) {
 	db, err := gorm.Open(gormlite.Open(":memory:"), &gorm.Config{})
 	if err != nil {

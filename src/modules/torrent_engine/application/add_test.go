@@ -80,8 +80,11 @@ func TestAddTorrent_storesEachVideoAndKeepsOneListEntry(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(listed) != 1 || listed[0].Size != 500 || listed[0].ID != rows[1].ID {
-		t.Fatalf("list %+v, want the larger episode only", listed)
+	if len(listed) != 1 || listed[0].Size != 600 || listed[0].ID != rows[0].ID || len(listed[0].Episodes) != 2 {
+		t.Fatalf("list %+v, want one pack with both episodes", listed)
+	}
+	if listed[0].Name != "Big Bang - A Teoria 2006 - 1ª Temporada Completa (720p) Acesse o ORIGINAL WWW.BLUDV.TV" {
+		t.Fatalf("pack title %q", listed[0].Name)
 	}
 
 	const movieHash = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"

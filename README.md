@@ -86,9 +86,10 @@ Enabled by default (`[dlna] enabled = true`). The server listens on `[dlna] port
 
 Browse is virtual, not a scan of `data_dir`:
 
-- `/` contains a `Movies` container.
-- `/Movies` lists every non-deleted row in `torrents`.
-- Each item is a `object.item.videoItem`. Its resource URL is `http://<lan-ip>:<server.port>/stream/watch/{id}`, with MIME taken from the file extension (mkv, mp4, avi, mov, m4v, ts, wmv, flv, webm; anything else is advertised as `video/mp4`).
+- `/` contains a `Movies` container. A `Series` container appears when a stored torrent has more than one video, or a file whose name matches `SxxEyy`.
+- `/Movies` lists a torrent that resolved to one video. The item title is `torrent_name`.
+- `/Series` follows the torrent display path. A path that does not already start with `Series` gets that prefix. Each directory is a container. Each video is an item titled with the file name. A path segment named `sample` is not stored.
+- Each item is a `object.item.videoItem`. Its resource URL is `http://<lan-ip>:<server.port>/stream/watch/{id}`, with MIME taken from the file extension (mkv, mp4, avi, mov, m4v, ts, wmv, flv, webm; anything else is advertised as `video/mp4`). A season pack has one row per video, and `watch` opens that row's file index. A single-video torrent still opens the largest video.
 
 SSDP notify interval is 30 seconds. A control point on the LAN should see the friendly name, open Movies, and play an item by pulling the watch URL.
 
@@ -99,7 +100,7 @@ What is not here yet: a DMR, a control point, `SetAVTransportURI`, or any push-t
 - Title search through IMDb, stream list through Torrentio (`brazuca` movie configuration). Search stays off until `IMDB_BASE_URL` and `TORRENTIO_BASE_URL` are both set.
 - BitTorrent streaming client with magnet parse (v1 and v2), tracker extraction, and `.torrent` persistence. `POST /torrent/add` accepts `{ "magnet": "magnet:?xt=urn:btih:..." }` and returns the id used by `/stream/watch/{id}`.
 - Largest-video selection, responsive reader, readahead, hybrid local/swarm reads.
-- SQLite library of added torrents, warmed on startup.
+- SQLite library of added torrents, one row per video file. `GET /torrent` returns one entry per movie and one entry per season pack, with `episodes` on the pack.
 - HTTP range streaming with DLNA content-feature headers.
 - DLNA/UPnP DMS: SSDP announce plus a virtual Movies folder.
 - Cobra CLI (`serve`, `migrate`), configuration from the environment, Docker image.
