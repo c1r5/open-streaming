@@ -8,8 +8,8 @@ import (
 
 type TorrentModel struct {
 	gorm.Model
-	FileIndex   int     `gorm:"column:file_index;index"`
-	Hash        string  `gorm:"column:hash;uniqueIndex"`
+	FileIndex   int     `gorm:"column:file_index;uniqueIndex:idx_torrent_file"`
+	Hash        string  `gorm:"column:hash;uniqueIndex:idx_torrent_file"`
 	TorrentName string  `gorm:"column:torrent_name"`
 	IMDB        *string `gorm:"column:imdb;uniqueIndex"`
 	OutputPath  string  `gorm:"column:output"`

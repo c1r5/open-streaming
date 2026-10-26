@@ -30,8 +30,7 @@ func (s *Service) GetStreamFile(id uint) (*streamdomain.TorrentStreamFile, error
 	}
 
 	log.Printf("service: resolving stream id=%d hash=%s", id, record.Hash)
-	file, err := s.engine.Resolve(record.Hash)
-
+	file, err := s.open(record)
 	if err != nil {
 		return nil, err
 	}
@@ -41,6 +40,17 @@ func (s *Service) GetStreamFile(id uint) (*streamdomain.TorrentStreamFile, error
 		Path:   file.Path,
 		Reader: file.Reader,
 	}, nil
+}
+
+func (s *Service) open(record *streamdomain.TorrentStreamInfo) (*enginedomain.TorrentFile, error) {
+	var siblings int64
+	if err := s.db.Model(&streamdomain.TorrentStreamInfo{}).Where("hash = ?", record.Hash).Count(&siblings).Error; err != nil {
+		return nil, err
+	}
+	if siblings > 1 {
+		return s.engine.ResolveFile(record.Hash, record.FileIndex)
+	}
+	return s.engine.Resolve(record.Hash)
 }
 
 func (s *Service) byId(id uint) (*streamdomain.TorrentStreamInfo, error) {

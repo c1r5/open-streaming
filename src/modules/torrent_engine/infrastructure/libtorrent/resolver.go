@@ -31,17 +31,55 @@ func (t *TorrentEngine) ResolveMagnet(magnet *domain.MagnetModel) (*domain.Torre
 	return t.resolve(magnet)
 }
 
+func (t *TorrentEngine) ResolveFile(hash string, index int) (*domain.TorrentFile, error) {
+	return t.open(&domain.MagnetModel{Hash: hash}, &index)
+}
+
+func (t *TorrentEngine) ListVideos(magnet *domain.MagnetModel) ([]domain.VideoMeta, error) {
+	if magnet == nil || magnet.Hash == "" {
+		return nil, fmt.Errorf("torrent engine: magnet has no info hash")
+	}
+
+	meta, err := t.loadMeta(magnet)
+	if err != nil {
+		return nil, err
+	}
+
+	videos := make([]domain.VideoMeta, 0)
+	for index, file := range meta.Files {
+		if file == nil || !isVideo(file.Path()) {
+			continue
+		}
+		videos = append(videos, domain.VideoMeta{
+			Index: index,
+			Name:  file.DisplayPath(),
+			Path:  filepath.Join(t.dataDir, file.Path()),
+			Size:  file.Length(),
+		})
+	}
+	return videos, nil
+}
+
 func (t *TorrentEngine) resolve(magnet *domain.MagnetModel) (*domain.TorrentFile, error) {
+	return t.open(magnet, nil)
+}
+
+func fileCacheKey(hash string, index *int) string {
+	if index == nil {
+		return hash
+	}
+	return fmt.Sprintf("%s:%d", hash, *index)
+}
+
+func (t *TorrentEngine) open(magnet *domain.MagnetModel, index *int) (*domain.TorrentFile, error) {
 	hash := magnet.Hash
-	cached, _ := t.fileCache.Get(hash)
+	key := fileCacheKey(hash, index)
+	cached, _ := t.fileCache.Get(key)
 
 	if cached == nil {
-		meta, err := t.cache.Retrieve(hash, func() (*TorrentMeta, error) {
-			return t.fetchMeta(magnet)
-		})
-
+		meta, err := t.loadMeta(magnet)
 		if err != nil {
-			return nil, fmt.Errorf("torrent engine: resolve: %w", err)
+			return nil, err
 		}
 
 		if len(meta.Files) == 0 {
@@ -49,11 +87,22 @@ func (t *TorrentEngine) resolve(magnet *domain.MagnetModel) (*domain.TorrentFile
 		}
 
 		var file *libtorrent.File
+		fileIndex := 0
 
-		for _, f := range meta.Files {
-			if file == nil || f.Length() > file.Length() {
-				if isVideo(f.Path()) {
+		if index != nil {
+			fileIndex = *index
+			if fileIndex < 0 || fileIndex >= len(meta.Files) || meta.Files[fileIndex] == nil {
+				return nil, fmt.Errorf("torrent engine: file index %d not in torrent (hash=%s)", fileIndex, hash)
+			}
+			file = meta.Files[fileIndex]
+		} else {
+			for i, f := range meta.Files {
+				if f == nil || !isVideo(f.Path()) || domain.IsSamplePath(f.DisplayPath()) {
+					continue
+				}
+				if file == nil || f.Length() > file.Length() {
 					file = f
+					fileIndex = i
 				}
 			}
 		}
@@ -66,10 +115,11 @@ func (t *TorrentEngine) resolve(magnet *domain.MagnetModel) (*domain.TorrentFile
 			path:   filepath.Join(t.dataDir, file.Path()),
 			name:   file.DisplayPath(),
 			size:   file.Length(),
+			index:  fileIndex,
 			source: file,
 		}
 
-		t.fileCache.Set(hash, cached)
+		t.fileCache.Set(key, cached)
 	}
 
 	log.Printf("engine: resolve creating torrent reader (hash=%s, file=%s, size=%d)", hash, cached.name, cached.size)
@@ -95,6 +145,17 @@ func (t *TorrentEngine) resolve(magnet *domain.MagnetModel) (*domain.TorrentFile
 		Path:   cached.path,
 		Name:   cached.name,
 		Size:   cached.size,
+		Index:  cached.index,
 		Reader: finalReader,
 	}, nil
+}
+
+func (t *TorrentEngine) loadMeta(magnet *domain.MagnetModel) (*TorrentMeta, error) {
+	meta, err := t.cache.Retrieve(magnet.Hash, func() (*TorrentMeta, error) {
+		return t.fetchMeta(magnet)
+	})
+	if err != nil {
+		return nil, fmt.Errorf("torrent engine: resolve: %w", err)
+	}
+	return meta, nil
 }
