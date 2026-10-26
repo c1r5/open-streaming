@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/anacrolix/dms/upnpav"
-	"github.com/c1r5/open-streaming/src/modules/torrent_engine/domain"
 	"github.com/c1r5/open-streaming/src/modules/torrent_engine/infrastructure/persistence"
 	_ "github.com/ncruces/go-sqlite3/embed"
 	"github.com/ncruces/go-sqlite3/gormlite"
@@ -73,7 +72,7 @@ func TestBrowse_seriesPathAndMoviesStaySeparate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(movies) != 1 || itemTitle(t, movies[0]) != "bolt_supercao.mkv" || itemURL(t, movies[0]) != "http://192.168.1.109:3000/stream/watch/"+idOf(domain.MovieWatchID(movie.ID)) {
+	if len(movies) != 1 || itemTitle(t, movies[0]) != "bolt_supercao.mkv" || itemURL(t, movies[0]) != "http://192.168.1.109:3000/movies/"+idOf(movie.ID)+"/watch" {
 		t.Fatalf("movies %#v", movies)
 	}
 
@@ -96,10 +95,10 @@ func TestBrowse_seriesPathAndMoviesStaySeparate(t *testing.T) {
 	if itemTitle(t, episodes[0]) != "The.Big.Bang.Theory.S01E01.720p.BluRay.x264.DUAL-WWW.BLUDV.TV.mkv" {
 		t.Fatalf("first episode %q", itemTitle(t, episodes[0]))
 	}
-	if itemURL(t, episodes[0]) != "http://192.168.1.109:3000/stream/watch/"+idOf(domain.EpisodeWatchID(episodeOne.ID)) {
+	if itemURL(t, episodes[0]) != "http://192.168.1.109:3000/series/"+idOf(series.ID)+"/episodes/"+idOf(episodeOne.ID)+"/watch" {
 		t.Fatalf("watch url %q", itemURL(t, episodes[0]))
 	}
-	if itemID(t, episodes[0]) != seasonPath+"/"+itemTitle(t, episodes[0])+"#"+idOf(domain.EpisodeWatchID(episodeOne.ID)) {
+	if itemID(t, episodes[0]) != seasonPath+"/"+itemTitle(t, episodes[0])+"#"+idOf(episodeOne.ID) {
 		t.Fatalf("object id %q", itemID(t, episodes[0]))
 	}
 

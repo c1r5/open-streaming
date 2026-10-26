@@ -4,11 +4,11 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"testing"
 	"time"
 
 	"github.com/c1r5/open-streaming/src/modules/torrent_engine/application"
-	"github.com/c1r5/open-streaming/src/modules/torrent_engine/domain"
 	"github.com/c1r5/open-streaming/src/modules/torrent_engine/infrastructure/persistence"
 	_ "github.com/ncruces/go-sqlite3/embed"
 	"github.com/ncruces/go-sqlite3/gormlite"
@@ -49,15 +49,15 @@ func TestListHandler_newestFirstAndSkipsRemoved(t *testing.T) {
 
 	service := application.NewService(&application.ServiceOptions{DB: db})
 	controller := NewController(service)
-	request := httptest.NewRequest(http.MethodGet, "/torrent", nil)
+	request := httptest.NewRequest(http.MethodGet, "/movies", nil)
 	recorder := httptest.NewRecorder()
-	controller.ListHandler()(recorder, request)
+	controller.MoviesHandler()(recorder, request)
 
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status %d body %s", recorder.Code, recorder.Body.String())
 	}
 
-	var items []application.ListedTorrent
+	var items []application.ListedMovie
 	if err := json.Unmarshal(recorder.Body.Bytes(), &items); err != nil {
 		t.Fatal(err)
 	}
@@ -118,34 +118,39 @@ func TestListHandler_groupsSeasonPack(t *testing.T) {
 	service := application.NewService(&application.ServiceOptions{DB: db})
 	controller := NewController(service)
 	recorder := httptest.NewRecorder()
-	controller.ListHandler()(recorder, httptest.NewRequest(http.MethodGet, "/torrent", nil))
+	controller.SeriesHandler()(recorder, httptest.NewRequest(http.MethodGet, "/series", nil))
 
-	var items []application.ListedTorrent
-	if err := json.Unmarshal(recorder.Body.Bytes(), &items); err != nil {
+	var seriesItems []application.ListedSeries
+	if err := json.Unmarshal(recorder.Body.Bytes(), &seriesItems); err != nil {
 		t.Fatal(err)
 	}
-	if len(items) != 2 {
-		t.Fatalf("len %d body %s", len(items), recorder.Body.String())
+	if len(seriesItems) != 1 || seriesItems[0].Name != season || seriesItems[0].Size != 600 || seriesItems[0].ID != series.ID {
+		t.Fatalf("series %+v body %s", seriesItems, recorder.Body.String())
 	}
-	var packItem, movieItem application.ListedTorrent
-	for _, item := range items {
-		if item.Name == "bolt_supercao.mkv" {
-			movieItem = item
-			continue
-		}
-		packItem = item
+
+	episodeRecorder := httptest.NewRecorder()
+	episodeRequest := httptest.NewRequest(http.MethodGet, "/series/1/episodes", nil)
+	episodeRequest.SetPathValue("id", strconv.FormatUint(uint64(series.ID), 10))
+	controller.EpisodesHandler()(episodeRecorder, episodeRequest)
+	var episodes []application.ListedEpisode
+	if err := json.Unmarshal(episodeRecorder.Body.Bytes(), &episodes); err != nil {
+		t.Fatal(err)
 	}
-	if packItem.Name != season || packItem.Size != 600 || packItem.ID != domain.EpisodeWatchID(episodeOne.ID) {
-		t.Fatalf("pack %+v", packItem)
+	if len(episodes) != 2 || episodes[0].ID != episodeOne.ID || episodes[1].ID != episodeTwo.ID {
+		t.Fatalf("episodes %+v body %s", episodes, episodeRecorder.Body.String())
 	}
-	if len(packItem.Episodes) != 2 || packItem.Episodes[0].ID != domain.EpisodeWatchID(episodeOne.ID) || packItem.Episodes[1].ID != domain.EpisodeWatchID(episodeTwo.ID) {
-		t.Fatalf("episodes %+v", packItem.Episodes)
+	if episodes[0].Name != "The.Big.Bang.Theory.S01E01.720p.BluRay.x264.DUAL-WWW.BLUDV.TV.mkv" {
+		t.Fatalf("episode name %q", episodes[0].Name)
 	}
-	if packItem.Episodes[0].Name != "The.Big.Bang.Theory.S01E01.720p.BluRay.x264.DUAL-WWW.BLUDV.TV.mkv" {
-		t.Fatalf("episode name %q", packItem.Episodes[0].Name)
+
+	movieRecorder := httptest.NewRecorder()
+	controller.MoviesHandler()(movieRecorder, httptest.NewRequest(http.MethodGet, "/movies", nil))
+	var movies []application.ListedMovie
+	if err := json.Unmarshal(movieRecorder.Body.Bytes(), &movies); err != nil {
+		t.Fatal(err)
 	}
-	if movieItem.Name != "bolt_supercao.mkv" || movieItem.Episodes != nil {
-		t.Fatalf("movie %+v", movieItem)
+	if len(movies) != 1 || movies[0].Name != "bolt_supercao.mkv" || movies[0].ID != movie.ID {
+		t.Fatalf("movies %+v", movies)
 	}
 }
 
@@ -161,7 +166,7 @@ func TestListHandler_empty(t *testing.T) {
 	service := application.NewService(&application.ServiceOptions{DB: db})
 	controller := NewController(service)
 	recorder := httptest.NewRecorder()
-	controller.ListHandler()(recorder, httptest.NewRequest(http.MethodGet, "/torrent", nil))
+	controller.MoviesHandler()(recorder, httptest.NewRequest(http.MethodGet, "/movies", nil))
 
 	if recorder.Body.String() != "[]\n" {
 		t.Fatalf("body %q", recorder.Body.String())

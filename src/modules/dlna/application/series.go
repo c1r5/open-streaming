@@ -14,10 +14,11 @@ import (
 )
 
 type placedVideo struct {
-	row  torrentRow
-	full string
-	dir  string
-	base string
+	row      torrentRow
+	seriesID uint
+	full     string
+	dir      string
+	base     string
 }
 
 func (s *Service) loadLibrary() (movies []torrentRow, series []placedVideo, err error) {
@@ -27,7 +28,7 @@ func (s *Service) loadLibrary() (movies []torrentRow, series []placedVideo, err 
 	}
 	for _, movie := range movieRows {
 		movies = append(movies, torrentRow{
-			ID:        torrentdomain.MovieWatchID(movie.ID),
+			ID:        movie.ID,
 			Title:     movie.Torrent.Name,
 			Size:      movie.Size,
 			CreatedAt: movie.Torrent.CreatedAt,
@@ -42,14 +43,15 @@ func (s *Service) loadLibrary() (movies []torrentRow, series []placedVideo, err 
 		full := torrentdomain.LibraryPath(episode.Series.Torrent.Name + "/" + episode.Name)
 		series = append(series, placedVideo{
 			row: torrentRow{
-				ID:        torrentdomain.EpisodeWatchID(episode.ID),
+				ID:        episode.ID,
 				Title:     episode.Name,
 				Size:      episode.Size,
 				CreatedAt: episode.CreatedAt,
 			},
-			full: full,
-			dir:  path.Dir(full),
-			base: path.Base(full),
+			seriesID: episode.SeriesID,
+			full:     full,
+			dir:      path.Dir(full),
+			base:     path.Base(full),
 		})
 	}
 	return movies, series, nil
@@ -164,7 +166,7 @@ func (s *Service) seriesDirectChildren(parent string, series []placedVideo) []in
 			itemObjectID(item),
 			item.dir,
 			item.base,
-			fmt.Sprintf("%s/stream/watch/%d", s.baseURL, item.row.ID),
+			fmt.Sprintf("%s/series/%d/episodes/%d/watch", s.baseURL, item.seriesID, item.row.ID),
 			domain.MIMEForPath(item.base),
 			item.row,
 		))

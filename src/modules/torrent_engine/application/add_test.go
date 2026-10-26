@@ -32,7 +32,7 @@ func TestAddTorrent_storesEachVideoAndKeepsOneListEntry(t *testing.T) {
 		},
 	}
 
-	firstID, err := service.AddTorrent(&domain.AddTorrentOptions{
+	kind, firstID, err := service.AddTorrent(&domain.AddTorrentOptions{
 		Magnet: "magnet:?xt=urn:btih:" + packHash,
 	})
 	if err != nil {
@@ -58,21 +58,21 @@ func TestAddTorrent_storesEachVideoAndKeepsOneListEntry(t *testing.T) {
 	if len(episodes) != 2 || episodes[0].FileIndex != 3 || episodes[0].Size != 100 || episodes[1].FileIndex != 7 || episodes[1].Size != 500 {
 		t.Fatalf("episodes %+v", episodes)
 	}
-	if domain.EpisodeWatchID(episodes[0].ID) != firstID {
-		t.Fatalf("add id %d, want first episode watch id %d", firstID, domain.EpisodeWatchID(episodes[0].ID))
+	if kind != "series" || series.ID != firstID {
+		t.Fatalf("add %s id %d, want series %d", kind, firstID, series.ID)
 	}
 	if len(engine.persisted) != 1 || engine.persisted[0] != packHash {
 		t.Fatalf("persisted %#v", engine.persisted)
 	}
 
-	again, err := service.AddTorrent(&domain.AddTorrentOptions{
+	againKind, again, err := service.AddTorrent(&domain.AddTorrentOptions{
 		Magnet: "magnet:?xt=urn:btih:" + packHash,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if again != firstID {
-		t.Fatalf("second add id %d, want %d", again, firstID)
+	if againKind != "series" || again != firstID {
+		t.Fatalf("second add %s id %d, want series %d", againKind, again, firstID)
 	}
 	var count int64
 	if err := db.Model(&persistence.TorrentModel{}).Where("hash = ?", packHash).Count(&count).Error; err != nil {
@@ -82,12 +82,16 @@ func TestAddTorrent_storesEachVideoAndKeepsOneListEntry(t *testing.T) {
 		t.Fatalf("count after second add %d", count)
 	}
 
-	listed, err := service.ListTorrents()
+	listed, err := service.ListSeries()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(listed) != 1 || listed[0].Size != 600 || listed[0].ID != firstID || len(listed[0].Episodes) != 2 {
-		t.Fatalf("list %+v, want one pack with both episodes", listed)
+	episodesListed, err := service.ListEpisodes(firstID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(listed) != 1 || listed[0].Size != 600 || listed[0].ID != firstID || len(episodesListed) != 2 {
+		t.Fatalf("list %+v episodes %+v", listed, episodesListed)
 	}
 	if listed[0].Name != season {
 		t.Fatalf("pack title %q", listed[0].Name)
@@ -108,14 +112,14 @@ func TestAddTorrent_storesEachVideoAndKeepsOneListEntry(t *testing.T) {
 		Path:  "/data/bolt_supercao.mkv",
 		Size:  539402598,
 	}}
-	movieID, err := service.AddTorrent(&domain.AddTorrentOptions{
+	movieKind, movieID, err := service.AddTorrent(&domain.AddTorrentOptions{
 		Magnet: "magnet:?xt=urn:btih:" + movieHash,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if movieID != domain.MovieWatchID(legacyMovie.ID) {
-		t.Fatalf("movie id %d, want watch id %d", movieID, domain.MovieWatchID(legacyMovie.ID))
+	if movieKind != "movie" || movieID != legacyMovie.ID {
+		t.Fatalf("movie %s id %d, want %d", movieKind, movieID, legacyMovie.ID)
 	}
 	var movie persistence.MovieModel
 	if err := db.First(&movie, legacyMovie.ID).Error; err != nil {

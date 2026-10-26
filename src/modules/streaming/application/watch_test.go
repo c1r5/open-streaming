@@ -46,7 +46,7 @@ func TestGetStreamFile_usesIndexOnlyForPack(t *testing.T) {
 	engine := &streamEngine{}
 	service := NewService(engine, db)
 
-	movie, err := service.GetStreamFile(enginedomain.MovieWatchID(movieRow.ID))
+	movie, err := service.GetMovieFile(movieRow.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -54,11 +54,11 @@ func TestGetStreamFile_usesIndexOnlyForPack(t *testing.T) {
 		t.Fatalf("movie path %q resolve %d files %#v", movie.Path, engine.resolveCalls, engine.fileCalls)
 	}
 
-	first, err := service.GetStreamFile(enginedomain.EpisodeWatchID(episodeOne.ID))
+	first, err := service.GetEpisodeFile(series.ID, episodeOne.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, err := service.GetStreamFile(enginedomain.EpisodeWatchID(episodeTwo.ID))
+	second, err := service.GetEpisodeFile(series.ID, episodeTwo.ID)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -60,8 +60,14 @@ func warmUpEngine(eng domain.ITorrentEngine, db *gorm.DB) {
 }
 
 func (m *TorrentModule) registerRoutes() {
-	m.mux.HandleFunc("GET /torrent", func(w http.ResponseWriter, r *http.Request) {
-		m.c.ListHandler()(w, r)
+	m.mux.HandleFunc("GET /movies", func(w http.ResponseWriter, r *http.Request) {
+		m.c.MoviesHandler()(w, r)
+	})
+	m.mux.HandleFunc("GET /series", func(w http.ResponseWriter, r *http.Request) {
+		m.c.SeriesHandler()(w, r)
+	})
+	m.mux.HandleFunc("GET /series/{id}/episodes", func(w http.ResponseWriter, r *http.Request) {
+		m.c.EpisodesHandler()(w, r)
 	})
 	m.mux.HandleFunc("POST /torrent/add", func(w http.ResponseWriter, r *http.Request) {
 		m.c.AddHandler()(w, r)

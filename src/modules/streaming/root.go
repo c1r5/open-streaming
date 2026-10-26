@@ -22,10 +22,10 @@ func New(mux *http.ServeMux, eng enginedomain.ITorrentEngine, db *gorm.DB) {
 }
 
 func (s *StreamingModule) registerRoutes() {
-	s.mux.HandleFunc("GET /stream/watch/{id}", func(w http.ResponseWriter, r *http.Request) {
-		s.c.StreamWatch()(w, r)
+	s.mux.HandleFunc("GET /movies/{id}/watch", func(w http.ResponseWriter, r *http.Request) {
+		s.c.MovieWatch()(w, r)
 	})
-	s.mux.HandleFunc("GET /stream/info/{id}", func(w http.ResponseWriter, r *http.Request) {
-		s.c.GetStreamInfo()(w, r)
+	s.mux.HandleFunc("GET /series/{id}/episodes/{episodeId}/watch", func(w http.ResponseWriter, r *http.Request) {
+		s.c.EpisodeWatch()(w, r)
 	})
 }
