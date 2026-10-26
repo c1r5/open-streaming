@@ -21,7 +21,7 @@ func (s *Service) ListTorrents() ([]ListedTorrent, error) {
 	}
 
 	items := make([]ListedTorrent, 0, len(rows))
-	for _, row := range rows {
+	for _, row := range largestPerHash(rows) {
 		imdb := ""
 		if row.IMDB != nil {
 			imdb = *row.IMDB
@@ -35,4 +35,27 @@ func (s *Service) ListTorrents() ([]ListedTorrent, error) {
 		})
 	}
 	return items, nil
+}
+
+// largestPerHash keeps the query order and one row per info hash.
+// The kept row is the largest video. A tie keeps the lower file index.
+func largestPerHash(rows []persistence.TorrentModel) []persistence.TorrentModel {
+	best := make(map[string]persistence.TorrentModel, len(rows))
+	order := make([]string, 0, len(rows))
+	for _, row := range rows {
+		current, ok := best[row.Hash]
+		if !ok {
+			best[row.Hash] = row
+			order = append(order, row.Hash)
+			continue
+		}
+		if row.Size > current.Size || (row.Size == current.Size && row.FileIndex < current.FileIndex) {
+			best[row.Hash] = row
+		}
+	}
+	out := make([]persistence.TorrentModel, 0, len(order))
+	for _, hash := range order {
+		out = append(out, best[hash])
+	}
+	return out
 }

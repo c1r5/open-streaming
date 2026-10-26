@@ -31,17 +31,39 @@ func (t *TorrentEngine) ResolveMagnet(magnet *domain.MagnetModel) (*domain.Torre
 	return t.resolve(magnet)
 }
 
+func (t *TorrentEngine) ListVideos(magnet *domain.MagnetModel) ([]domain.VideoMeta, error) {
+	if magnet == nil || magnet.Hash == "" {
+		return nil, fmt.Errorf("torrent engine: magnet has no info hash")
+	}
+
+	meta, err := t.loadMeta(magnet)
+	if err != nil {
+		return nil, err
+	}
+
+	videos := make([]domain.VideoMeta, 0)
+	for index, file := range meta.Files {
+		if file == nil || !isVideo(file.Path()) {
+			continue
+		}
+		videos = append(videos, domain.VideoMeta{
+			Index: index,
+			Name:  file.DisplayPath(),
+			Path:  filepath.Join(t.dataDir, file.Path()),
+			Size:  file.Length(),
+		})
+	}
+	return videos, nil
+}
+
 func (t *TorrentEngine) resolve(magnet *domain.MagnetModel) (*domain.TorrentFile, error) {
 	hash := magnet.Hash
 	cached, _ := t.fileCache.Get(hash)
 
 	if cached == nil {
-		meta, err := t.cache.Retrieve(hash, func() (*TorrentMeta, error) {
-			return t.fetchMeta(magnet)
-		})
-
+		meta, err := t.loadMeta(magnet)
 		if err != nil {
-			return nil, fmt.Errorf("torrent engine: resolve: %w", err)
+			return nil, err
 		}
 
 		if len(meta.Files) == 0 {
@@ -49,12 +71,15 @@ func (t *TorrentEngine) resolve(magnet *domain.MagnetModel) (*domain.TorrentFile
 		}
 
 		var file *libtorrent.File
+		fileIndex := 0
 
-		for _, f := range meta.Files {
+		for index, f := range meta.Files {
+			if f == nil || !isVideo(f.Path()) || domain.IsSamplePath(f.DisplayPath()) {
+				continue
+			}
 			if file == nil || f.Length() > file.Length() {
-				if isVideo(f.Path()) {
-					file = f
-				}
+				file = f
+				fileIndex = index
 			}
 		}
 
@@ -66,6 +91,7 @@ func (t *TorrentEngine) resolve(magnet *domain.MagnetModel) (*domain.TorrentFile
 			path:   filepath.Join(t.dataDir, file.Path()),
 			name:   file.DisplayPath(),
 			size:   file.Length(),
+			index:  fileIndex,
 			source: file,
 		}
 
@@ -95,6 +121,17 @@ func (t *TorrentEngine) resolve(magnet *domain.MagnetModel) (*domain.TorrentFile
 		Path:   cached.path,
 		Name:   cached.name,
 		Size:   cached.size,
+		Index:  cached.index,
 		Reader: finalReader,
 	}, nil
+}
+
+func (t *TorrentEngine) loadMeta(magnet *domain.MagnetModel) (*TorrentMeta, error) {
+	meta, err := t.cache.Retrieve(magnet.Hash, func() (*TorrentMeta, error) {
+		return t.fetchMeta(magnet)
+	})
+	if err != nil {
+		return nil, fmt.Errorf("torrent engine: resolve: %w", err)
+	}
+	return meta, nil
 }

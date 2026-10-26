@@ -12,6 +12,7 @@ import (
 
 type torrentRow struct {
 	ID          uint
+	FileIndex   int
 	TorrentName string
 	Hash        string
 	Size        int64
@@ -93,7 +94,7 @@ func (s *Service) browseMovies(host string) ([]interface{}, error) {
 	}
 
 	objs := make([]interface{}, 0, len(rows))
-	for _, r := range rows {
+	for _, r := range largestRowPerHash(rows) {
 		streamURL := fmt.Sprintf("%s/stream/watch/%d", s.baseURL, r.ID)
 		mimeType := domain.MIMEForPath(r.TorrentName)
 
@@ -125,6 +126,27 @@ func (s *Service) torrentCount() (int, error) {
 		return 0, err
 	}
 	return int(count), nil
+}
+
+func largestRowPerHash(rows []torrentRow) []torrentRow {
+	best := make(map[string]torrentRow, len(rows))
+	order := make([]string, 0, len(rows))
+	for _, row := range rows {
+		current, ok := best[row.Hash]
+		if !ok {
+			best[row.Hash] = row
+			order = append(order, row.Hash)
+			continue
+		}
+		if row.Size > current.Size || (row.Size == current.Size && row.FileIndex < current.FileIndex) {
+			best[row.Hash] = row
+		}
+	}
+	out := make([]torrentRow, 0, len(order))
+	for _, hash := range order {
+		out = append(out, best[hash])
+	}
+	return out
 }
 
 func StreamBaseURL(host string, port string) string {
