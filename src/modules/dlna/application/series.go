@@ -14,11 +14,12 @@ import (
 )
 
 type placedVideo struct {
-	row      torrentRow
-	seriesID uint
-	full     string
-	dir      string
-	base     string
+	row         torrentRow
+	seriesID    uint
+	full        string
+	dir         string
+	base        string
+	subtitleExt string
 }
 
 func (s *Service) loadLibrary() (movies []torrentRow, series []placedVideo, err error) {
@@ -48,10 +49,11 @@ func (s *Service) loadLibrary() (movies []torrentRow, series []placedVideo, err 
 				Size:      episode.Size,
 				CreatedAt: episode.CreatedAt,
 			},
-			seriesID: episode.SeriesID,
-			full:     full,
-			dir:      path.Dir(full),
-			base:     path.Base(full),
+			seriesID:    episode.SeriesID,
+			full:        full,
+			dir:         path.Dir(full),
+			base:        path.Base(full),
+			subtitleExt: episode.SubtitleExt,
 		})
 	}
 	return movies, series, nil
@@ -124,6 +126,17 @@ func (s *Service) folderContainer(id, title, parent string, childCount int) upnp
 	}
 }
 
+func (s *Service) episodeItem(item placedVideo) upnpav.Item {
+	watchURL := fmt.Sprintf("%s/series/%d/episodes/%d/watch", s.baseURL, item.seriesID, item.row.ID)
+	subtitleURL := ""
+	subtitleMIME := ""
+	if item.subtitleExt != "" {
+		subtitleURL = fmt.Sprintf("%s/series/%d/episodes/%d/subtitle", s.baseURL, item.seriesID, item.row.ID)
+		subtitleMIME = domain.SubtitleMIME(item.subtitleExt)
+	}
+	return s.videoItem(itemObjectID(item), item.dir, item.base, watchURL, domain.MIMEForPath(item.base), subtitleURL, subtitleMIME, item.row)
+}
+
 func containerParent(id string) string {
 	if id == domain.MoviesPath || id == domain.SeriesPath {
 		return "0"
@@ -135,7 +148,18 @@ func containerParent(id string) string {
 	return parent
 }
 
-func (s *Service) videoItem(id, parent, title, streamURL, mime string, row torrentRow) upnpav.Item {
+func (s *Service) videoItem(id, parent, title, streamURL, mime, subtitleURL, subtitleMIME string, row torrentRow) upnpav.Item {
+	resources := []upnpav.Resource{{
+		URL:          streamURL,
+		ProtocolInfo: fmt.Sprintf("http-get:*:%s:DLNA.ORG_OP=01;DLNA.ORG_CI=0;DLNA.ORG_FLAGS=01700000000000000000000000000000", mime),
+		Size:         uint64(row.Size),
+	}}
+	if subtitleURL != "" {
+		resources = append(resources, upnpav.Resource{
+			URL:          subtitleURL,
+			ProtocolInfo: fmt.Sprintf("http-get:*:%s:*", subtitleMIME),
+		})
+	}
 	return upnpav.Item{
 		Object: upnpav.Object{
 			ID:         id,
@@ -145,11 +169,7 @@ func (s *Service) videoItem(id, parent, title, streamURL, mime string, row torre
 			Class:      "object.item.videoItem",
 			Date:       upnpav.Timestamp{Time: row.CreatedAt},
 		},
-		Res: []upnpav.Resource{{
-			URL:          streamURL,
-			ProtocolInfo: fmt.Sprintf("http-get:*:%s:DLNA.ORG_OP=01;DLNA.ORG_CI=0;DLNA.ORG_FLAGS=01700000000000000000000000000000", mime),
-			Size:         uint64(row.Size),
-		}},
+		Res: resources,
 	}
 }
 
@@ -162,14 +182,7 @@ func (s *Service) seriesDirectChildren(parent string, series []placedVideo) []in
 		objs = append(objs, s.folderContainer(id, folder, parent, len(belowFolders)+len(belowItems)))
 	}
 	for _, item := range items {
-		objs = append(objs, s.videoItem(
-			itemObjectID(item),
-			item.dir,
-			item.base,
-			fmt.Sprintf("%s/series/%d/episodes/%d/watch", s.baseURL, item.seriesID, item.row.ID),
-			domain.MIMEForPath(item.base),
-			item.row,
-		))
+		objs = append(objs, s.episodeItem(item))
 	}
 	return objs
 }

@@ -37,11 +37,14 @@ func TestBrowse_seriesPathAndMoviesStaySeparate(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	subtitleIndex := 2
 	episodeOne := persistence.EpisodeModel{
-		SeriesID:  series.ID,
-		FileIndex: 3,
-		Name:      "The.Big.Bang.Theory.S01E01.720p.BluRay.x264.DUAL-WWW.BLUDV.TV.mkv",
-		Size:      100,
+		SeriesID:      series.ID,
+		FileIndex:     3,
+		Name:          "The.Big.Bang.Theory.S01E01.720p.BluRay.x264.DUAL-WWW.BLUDV.TV.mkv",
+		Size:          100,
+		SubtitleIndex: &subtitleIndex,
+		SubtitleExt:   ".srt",
 	}
 	episodeTwo := persistence.EpisodeModel{
 		SeriesID:  series.ID,
@@ -98,6 +101,20 @@ func TestBrowse_seriesPathAndMoviesStaySeparate(t *testing.T) {
 	if itemURL(t, episodes[0]) != "http://192.168.1.109:3000/series/"+idOf(series.ID)+"/episodes/"+idOf(episodeOne.ID)+"/watch" {
 		t.Fatalf("watch url %q", itemURL(t, episodes[0]))
 	}
+	firstItem := asItem(t, episodes[0])
+	if len(firstItem.Res) != 2 || firstItem.Res[1].URL != "http://192.168.1.109:3000/series/"+idOf(series.ID)+"/episodes/"+idOf(episodeOne.ID)+"/subtitle" || firstItem.Res[1].ProtocolInfo != "http-get:*:text/srt:*" {
+		t.Fatalf("subtitle res %#v", firstItem.Res)
+	}
+	if len(asItem(t, episodes[1]).Res) != 1 {
+		t.Fatalf("episode without sidecar %#v", asItem(t, episodes[1]).Res)
+	}
+	episodeMeta, err := service.BrowseMetadata(itemID(t, episodes[0]), "", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(asItem(t, episodeMeta).Res) != 2 {
+		t.Fatalf("metadata res %#v", asItem(t, episodeMeta).Res)
+	}
 	if itemID(t, episodes[0]) != seasonPath+"/"+itemTitle(t, episodes[0])+"#"+idOf(episodeOne.ID) {
 		t.Fatalf("object id %q", itemID(t, episodes[0]))
 	}
@@ -139,8 +156,8 @@ func itemTitle(t *testing.T, value interface{}) string {
 func itemURL(t *testing.T, value interface{}) string {
 	t.Helper()
 	item := asItem(t, value)
-	if len(item.Res) != 1 {
-		t.Fatalf("resources %#v", item.Res)
+	if len(item.Res) == 0 {
+		t.Fatal("item has no resource")
 	}
 	return item.Res[0].URL
 }

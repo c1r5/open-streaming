@@ -97,7 +97,9 @@ Browse is virtual, not a scan of `data_dir`:
 
 SSDP notify interval is 30 seconds. A control point on the LAN should see the friendly name, open Movies, and play an item by pulling the watch URL.
 
-What is not here yet: a DMR, a control point, `SetAVTransportURI`, or any push-to-device flow. Subtitles are not published as extra resources.
+An episode with a sidecar also publishes that file as a second resource, `http://<lan-ip>:<server.port>/series/{id}/episodes/{episodeId}/subtitle`. The protocol info uses `text/srt`, `text/vtt`, or `text/x-ssa`. An episode without a sidecar keeps a single resource.
+
+What is not here yet: a DMR, a control point, `SetAVTransportURI`, or any push-to-device flow.
 
 ## Features
 
@@ -109,7 +111,7 @@ What is not here yet: a DMR, a control point, `SetAVTransportURI`, or any push-t
 - DLNA/UPnP DMS: SSDP announce plus a virtual Movies folder.
 - Cobra CLI (`serve`, `migrate`), configuration from the environment, Docker image.
 
-Not done: DMR / control point, transcode-on-play, delete, subtitles, a web UI.
+Not done: DMR / control point, transcode-on-play, delete, a web UI.
 
 ## Tech stack
 
