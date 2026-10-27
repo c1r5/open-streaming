@@ -93,6 +93,49 @@ func LibraryPath(displayPath string) string {
 	return "/" + normalized
 }
 
+var subtitleRank = map[string]int{
+	".srt": 0,
+	".vtt": 1,
+	".ass": 2,
+	".ssa": 3,
+}
+
+// SubtitleFor picks the sidecar that shares the video directory and file stem.
+// Preference is .srt, then .vtt, .ass, and .ssa. A tie keeps the lowest torrent index.
+func SubtitleFor(videoName string, files []VideoMeta) (index int, ext string, ok bool) {
+	dir, stem := fileStem(videoName)
+	bestRank := len(subtitleRank)
+	bestIndex := -1
+	bestExt := ""
+	for _, file := range files {
+		fileExt := strings.ToLower(path.Ext(file.Name))
+		rank, known := subtitleRank[fileExt]
+		if !known {
+			continue
+		}
+		fileDir, fileStemName := fileStem(file.Name)
+		if !strings.EqualFold(fileDir, dir) || !strings.EqualFold(fileStemName, stem) {
+			continue
+		}
+		if rank < bestRank || (rank == bestRank && (bestIndex < 0 || file.Index < bestIndex)) {
+			bestRank = rank
+			bestIndex = file.Index
+			bestExt = fileExt
+		}
+	}
+	if bestIndex < 0 {
+		return 0, "", false
+	}
+	return bestIndex, bestExt, true
+}
+
+func fileStem(name string) (string, string) {
+	normalized := strings.Trim(strings.ReplaceAll(name, "\\", "/"), "/")
+	dir, base := path.Split(normalized)
+	dir = strings.Trim(dir, "/")
+	return dir, strings.TrimSuffix(base, path.Ext(base))
+}
+
 func HasEpisode(name string) bool {
 	return episodeOf(name).ok
 }

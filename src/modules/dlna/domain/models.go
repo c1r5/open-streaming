@@ -32,6 +32,17 @@ func MIMEForPath(name string) string {
 	return "video/mp4"
 }
 
+func SubtitleMIME(ext string) string {
+	switch strings.ToLower(ext) {
+	case ".vtt":
+		return "text/vtt"
+	case ".ass", ".ssa":
+		return "text/x-ssa"
+	default:
+		return "text/srt"
+	}
+}
+
 func VirtualPath(name string) string {
 	return fmt.Sprintf("%s/%s", MoviesPath, name)
 }

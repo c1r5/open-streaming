@@ -50,6 +50,20 @@ func init() {
 			return db.Migrator().DropTable(&persistence.EpisodeModel{}, &persistence.SeriesModel{}, &persistence.MovieModel{})
 		},
 	})
+
+	database.RegisterMigration(database.Migration{
+		Version:     4,
+		Description: "Episódio guarda o índice da legenda irmã",
+		Up: func(db *gorm.DB) error {
+			return db.AutoMigrate(&persistence.EpisodeModel{})
+		},
+		Down: func(db *gorm.DB) error {
+			if err := db.Migrator().DropColumn(&persistence.EpisodeModel{}, "SubtitleIndex"); err != nil {
+				return err
+			}
+			return db.Migrator().DropColumn(&persistence.EpisodeModel{}, "SubtitleExt")
+		},
+	})
 }
 
 func columnExists(db *gorm.DB, table, column string) bool {

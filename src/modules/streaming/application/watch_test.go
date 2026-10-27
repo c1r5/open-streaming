@@ -2,6 +2,7 @@ package application
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	enginedomain "github.com/c1r5/open-streaming/src/modules/torrent_engine/domain"
@@ -35,7 +36,8 @@ func TestGetStreamFile_usesIndexOnlyForPack(t *testing.T) {
 	if err := db.Create(&series).Error; err != nil {
 		t.Fatal(err)
 	}
-	episodeOne := persistence.EpisodeModel{SeriesID: series.ID, FileIndex: 3, Name: "S01E01.mkv", Size: 100}
+	subtitleIndex := 4
+	episodeOne := persistence.EpisodeModel{SeriesID: series.ID, FileIndex: 3, Name: "S01E01.mkv", Size: 100, SubtitleIndex: &subtitleIndex, SubtitleExt: ".srt"}
 	episodeTwo := persistence.EpisodeModel{SeriesID: series.ID, FileIndex: 7, Name: "S01E02.mkv", Size: 500}
 	for _, row := range []*persistence.EpisodeModel{&episodeOne, &episodeTwo} {
 		if err := db.Create(row).Error; err != nil {
@@ -65,6 +67,17 @@ func TestGetStreamFile_usesIndexOnlyForPack(t *testing.T) {
 	if first.Path != "3" || second.Path != "7" || engine.resolveCalls != 1 {
 		t.Fatalf("episodes %q %q resolve %d calls %#v", first.Path, second.Path, engine.resolveCalls, engine.fileCalls)
 	}
+
+	subtitle, err := service.GetEpisodeSubtitle(series.ID, episodeOne.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if subtitle.Path != "S01E01.srt" || subtitle.ContentType != "text/srt; charset=utf-8" || subtitle.Reader == nil {
+		t.Fatalf("subtitle %+v", subtitle)
+	}
+	if _, err := service.GetEpisodeSubtitle(series.ID, episodeTwo.ID); err == nil {
+		t.Fatal("episode without sidecar returned a subtitle")
+	}
 }
 
 type streamEngine struct {
@@ -83,11 +96,19 @@ func (e *streamEngine) ResolveMagnet(*enginedomain.MagnetModel) (*enginedomain.T
 
 func (e *streamEngine) ResolveFile(_ string, index int) (*enginedomain.TorrentFile, error) {
 	e.fileCalls = append(e.fileCalls, index)
+	if index == 4 {
+		body := "1\n00:00:01,000 --> 00:00:02,000\nOi\n"
+		return &enginedomain.TorrentFile{Path: "S01E01.srt", Name: "S01E01.srt", Reader: strings.NewReader(body)}, nil
+	}
 	name := fmt.Sprintf("%d", index)
 	return &enginedomain.TorrentFile{Path: name, Name: name}, nil
 }
 
 func (e *streamEngine) ListVideos(*enginedomain.MagnetModel) ([]enginedomain.VideoMeta, error) {
+	return nil, nil
+}
+
+func (e *streamEngine) ListFiles(*enginedomain.MagnetModel) ([]enginedomain.VideoMeta, error) {
 	return nil, nil
 }
 

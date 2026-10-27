@@ -60,6 +60,31 @@ func (t *TorrentEngine) ListVideos(magnet *domain.MagnetModel) ([]domain.VideoMe
 	return videos, nil
 }
 
+func (t *TorrentEngine) ListFiles(magnet *domain.MagnetModel) ([]domain.VideoMeta, error) {
+	if magnet == nil || magnet.Hash == "" {
+		return nil, fmt.Errorf("torrent engine: magnet has no info hash")
+	}
+
+	meta, err := t.loadMeta(magnet)
+	if err != nil {
+		return nil, err
+	}
+
+	files := make([]domain.VideoMeta, 0, len(meta.Files))
+	for index, file := range meta.Files {
+		if file == nil {
+			continue
+		}
+		files = append(files, domain.VideoMeta{
+			Index: index,
+			Name:  file.DisplayPath(),
+			Path:  filepath.Join(t.dataDir, file.Path()),
+			Size:  file.Length(),
+		})
+	}
+	return files, nil
+}
+
 func (t *TorrentEngine) resolve(magnet *domain.MagnetModel) (*domain.TorrentFile, error) {
 	return t.open(magnet, nil)
 }

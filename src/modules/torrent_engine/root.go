@@ -49,11 +49,19 @@ func warmUpEngine(eng domain.ITorrentEngine, db *gorm.DB) {
 		go func() {
 			if _, err := eng.Resolve(hash); err != nil {
 				log.Printf("engine warm-up: failed for hash=%s: %v", hash, err)
-			} else {
-				log.Printf("engine warm-up: ready (hash=%s)", hash)
-				if err := eng.PersistTorrentFile(hash); err != nil {
-					log.Printf("warn: could not persist .torrent for hash=%s: %v", hash, err)
-				}
+				return
+			}
+			log.Printf("engine warm-up: ready (hash=%s)", hash)
+			if err := eng.PersistTorrentFile(hash); err != nil {
+				log.Printf("warn: could not persist .torrent for hash=%s: %v", hash, err)
+			}
+			files, err := eng.ListFiles(&domain.MagnetModel{Hash: hash})
+			if err != nil {
+				log.Printf("engine warm-up: file list failed for hash=%s: %v", hash, err)
+				return
+			}
+			if err := application.LinkSeriesSubtitles(db, hash, files); err != nil {
+				log.Printf("engine warm-up: subtitle link failed for hash=%s: %v", hash, err)
 			}
 		}()
 	}

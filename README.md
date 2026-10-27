@@ -65,6 +65,8 @@ On `serve`, saved torrents are resolved in the background so the swarm is warm b
 
 `GET /movies/{id}/watch` loads the movie and calls `Resolve`, which picks the largest video. `GET /series/{id}/episodes/{episodeId}/watch` calls `ResolveFile` with that episode's file index. Both pass the reader to `http.ServeContent`. That handles `Range` requests, which DLNA and most players need for seek (`DLNA.ORG_OP=01` on the resource). Response headers also set `transferMode.dlna.org: Streaming` and `contentFeatures.dlna.org`.
 
+`GET /series/{id}/episodes/{episodeId}/subtitle` serves the sidecar stored for that episode (`.srt`, `.vtt`, `.ass`, or `.ssa`). The response uses `text/srt`, `text/vtt`, or `text/x-ssa`. An episode with no sidecar returns 404. `?format=vtt` returns WebVTT for `.srt` and `.vtt`. `.ass` and `.ssa` return 404 on that query.
+
 FFmpeg/ffprobe wrappers and a `[transcode]` config block exist under `src/modules/streaming/infrastructure/ffmpeg`. The watch path does not transcode. The DMS is started with `NoTranscode` and `NoProbe`. A TV that cannot play the container or codec will fail until transcoding is wired into this path.
 
 ### HTTP surface
@@ -80,6 +82,7 @@ FFmpeg/ffprobe wrappers and a `[transcode]` config block exist under `src/module
 | `GET` | `/series/{id}/episodes` | Episodes of that series, in `SxxEyy` order. |
 | `GET` | `/movies/{id}/watch` | Range-capable stream of the movie. The DMS publishes this URL. |
 | `GET` | `/series/{id}/episodes/{episodeId}/watch` | Range-capable stream of that episode. The DMS publishes this URL. |
+| `GET` | `/series/{id}/episodes/{episodeId}/subtitle` | Sidecar subtitle for that episode, or 404. |
 
 ## DLNA
 
@@ -94,7 +97,9 @@ Browse is virtual, not a scan of `data_dir`:
 
 SSDP notify interval is 30 seconds. A control point on the LAN should see the friendly name, open Movies, and play an item by pulling the watch URL.
 
-What is not here yet: a DMR, a control point, `SetAVTransportURI`, or any push-to-device flow. Subtitles are not published as extra resources.
+An episode with a sidecar also publishes that file as a second resource, `http://<lan-ip>:<server.port>/series/{id}/episodes/{episodeId}/subtitle`. The protocol info uses `text/srt`, `text/vtt`, or `text/x-ssa`. An episode without a sidecar keeps a single resource.
+
+What is not here yet: a DMR, a control point, `SetAVTransportURI`, or any push-to-device flow.
 
 ## Features
 
@@ -106,7 +111,7 @@ What is not here yet: a DMR, a control point, `SetAVTransportURI`, or any push-t
 - DLNA/UPnP DMS: SSDP announce plus a virtual Movies folder.
 - Cobra CLI (`serve`, `migrate`), configuration from the environment, Docker image.
 
-Not done: DMR / control point, transcode-on-play, delete, subtitles, a web UI.
+Not done: DMR / control point, transcode-on-play, delete, a web UI.
 
 ## Tech stack
 

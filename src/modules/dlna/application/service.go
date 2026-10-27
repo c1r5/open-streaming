@@ -63,14 +63,7 @@ func (s *Service) BrowseMetadata(path, rootObjectPath, host, userAgent string) (
 		return s.folderContainer(domain.MoviesPath, "Movies", "0", len(movies)), nil
 	default:
 		if item := findPlaced(path, series); item != nil {
-			return s.videoItem(
-				itemObjectID(*item),
-				item.dir,
-				item.base,
-				fmt.Sprintf("%s/series/%d/episodes/%d/watch", s.baseURL, item.seriesID, item.row.ID),
-				domain.MIMEForPath(item.base),
-				item.row,
-			), nil
+			return s.episodeItem(*item), nil
 		}
 		if !seriesDir(path, series) {
 			return nil, fmt.Errorf("unknown path: %s", path)
@@ -107,6 +100,8 @@ func (s *Service) browseMovies(movies []torrentRow) []interface{} {
 			row.Title,
 			fmt.Sprintf("%s/movies/%d/watch", s.baseURL, row.ID),
 			domain.MIMEForPath(row.Title),
+			"",
+			"",
 			row,
 		))
 	}

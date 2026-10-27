@@ -57,14 +57,20 @@ func (s *Service) AddTorrent(options *domain.AddTorrentOptions) (string, uint, e
 	}
 	domain.SortVideos(videos)
 
+	files, filesErr := s.torrentEngine.ListFiles(magnet)
+	if filesErr != nil {
+		log.Printf("warn: could not list torrent files for hash=%s: %v", magnet.Hash, filesErr)
+		files = nil
+	}
+
 	if err := s.torrentEngine.PersistTorrentFile(magnet.Hash); err != nil {
 		log.Printf("warn: could not persist .torrent for hash=%s: %v", magnet.Hash, err)
 	}
 
-	return s.saveLibrary(magnet.Hash, videos, imdb)
+	return s.saveLibrary(magnet.Hash, videos, files, imdb)
 }
 
-func (s *Service) saveLibrary(hash string, videos []domain.VideoMeta, imdb *string) (string, uint, error) {
+func (s *Service) saveLibrary(hash string, videos []domain.VideoMeta, files []domain.VideoMeta, imdb *string) (string, uint, error) {
 	var total int64
 	for _, video := range videos {
 		total += video.Size
@@ -92,7 +98,7 @@ func (s *Service) saveLibrary(hash string, videos []domain.VideoMeta, imdb *stri
 		if err != nil {
 			return "", 0, err
 		}
-		if err := s.upsertEpisodes(series.ID, videos); err != nil {
+		if err := s.upsertEpisodes(series.ID, videos, files); err != nil {
 			return "", 0, err
 		}
 		return "series", series.ID, nil
@@ -125,7 +131,7 @@ func (s *Service) upsertSeries(torrentID uint, imdb *string) (persistence.Series
 	return series, err
 }
 
-func (s *Service) upsertEpisodes(seriesID uint, videos []domain.VideoMeta) error {
+func (s *Service) upsertEpisodes(seriesID uint, videos []domain.VideoMeta, files []domain.VideoMeta) error {
 	var existing []persistence.EpisodeModel
 	if err := s.db.Where("series_id = ?", seriesID).Find(&existing).Error; err != nil {
 		return err
@@ -138,13 +144,26 @@ func (s *Service) upsertEpisodes(seriesID uint, videos []domain.VideoMeta) error
 	kept := map[uint]bool{}
 	for _, video := range videos {
 		base := path.Base(strings.ReplaceAll(video.Name, "\\", "/"))
+		subtitleIndex, subtitleExt := subtitleFields(video.Name, files)
 		episode, ok := byIndex[video.Index]
 		if !ok {
-			episode = persistence.EpisodeModel{SeriesID: seriesID, FileIndex: video.Index, Name: base, Size: video.Size}
+			episode = persistence.EpisodeModel{
+				SeriesID:      seriesID,
+				FileIndex:     video.Index,
+				Name:          base,
+				Size:          video.Size,
+				SubtitleIndex: subtitleIndex,
+				SubtitleExt:   subtitleExt,
+			}
 			if err := s.db.Create(&episode).Error; err != nil {
 				return err
 			}
-		} else if err := s.db.Model(&episode).Updates(map[string]any{"name": base, "size": video.Size}).Error; err != nil {
+		} else if err := s.db.Model(&episode).Select("Name", "Size", "SubtitleIndex", "SubtitleExt").Updates(&persistence.EpisodeModel{
+			Name:          base,
+			Size:          video.Size,
+			SubtitleIndex: subtitleIndex,
+			SubtitleExt:   subtitleExt,
+		}).Error; err != nil {
 			return err
 		}
 		kept[episode.ID] = true
@@ -154,6 +173,57 @@ func (s *Service) upsertEpisodes(seriesID uint, videos []domain.VideoMeta) error
 			continue
 		}
 		if err := s.db.Delete(&persistence.EpisodeModel{}, episode.ID).Error; err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func subtitleFields(videoName string, files []domain.VideoMeta) (*int, string) {
+	index, ext, ok := domain.SubtitleFor(videoName, files)
+	if !ok {
+		return nil, ""
+	}
+	return &index, ext
+}
+
+// LinkSeriesSubtitles fills subtitle indexes for a series already stored.
+// A hash that is not a series is left alone.
+func LinkSeriesSubtitles(db *gorm.DB, hash string, files []domain.VideoMeta) error {
+	var torrent persistence.TorrentModel
+	err := db.Where("hash = ?", hash).First(&torrent).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	var series persistence.SeriesModel
+	err = db.Where("torrent_id = ?", torrent.ID).First(&series).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	var episodes []persistence.EpisodeModel
+	if err := db.Where("series_id = ?", series.ID).Find(&episodes).Error; err != nil {
+		return err
+	}
+	byIndex := make(map[int]domain.VideoMeta, len(files))
+	for _, file := range files {
+		byIndex[file.Index] = file
+	}
+	for _, episode := range episodes {
+		video, ok := byIndex[episode.FileIndex]
+		if !ok {
+			continue
+		}
+		subtitleIndex, subtitleExt := subtitleFields(video.Name, files)
+		if err := db.Model(&persistence.EpisodeModel{}).Where("id = ?", episode.ID).Select("SubtitleIndex", "SubtitleExt").Updates(&persistence.EpisodeModel{
+			SubtitleIndex: subtitleIndex,
+			SubtitleExt:   subtitleExt,
+		}).Error; err != nil {
 			return err
 		}
 	}

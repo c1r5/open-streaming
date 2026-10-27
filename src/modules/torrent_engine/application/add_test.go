@@ -16,21 +16,28 @@ func TestAddTorrent_storesEachVideoAndKeepsOneListEntry(t *testing.T) {
 	service := NewService(&ServiceOptions{TorrentEngine: engine, DB: db})
 
 	const packHash = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	const episodeDir = "Series/Big Bang - A Teoria 2006 - 1ª Temporada Completa (720p) Acesse o ORIGINAL WWW.BLUDV.TV"
 	engine.videos = []domain.VideoMeta{
 		{Index: 4, Name: "Series/Sample/The.Big.Bang.Theory.S01E00.sample.mkv", Size: 20},
 		{
 			Index: 7,
-			Name:  "Series/Big Bang - A Teoria 2006 - 1ª Temporada Completa (720p) Acesse o ORIGINAL WWW.BLUDV.TV/The.Big.Bang.Theory.S01E02.720p.BluRay.x264.DUAL-WWW.BLUDV.TV.mkv",
+			Name:  episodeDir + "/The.Big.Bang.Theory.S01E02.720p.BluRay.x264.DUAL-WWW.BLUDV.TV.mkv",
 			Path:  "/data/e02.mkv",
 			Size:  500,
 		},
 		{
 			Index: 3,
-			Name:  "Series/Big Bang - A Teoria 2006 - 1ª Temporada Completa (720p) Acesse o ORIGINAL WWW.BLUDV.TV/The.Big.Bang.Theory.S01E01.720p.BluRay.x264.DUAL-WWW.BLUDV.TV.mkv",
+			Name:  episodeDir + "/The.Big.Bang.Theory.S01E01.720p.BluRay.x264.DUAL-WWW.BLUDV.TV.mkv",
 			Path:  "/data/e01.mkv",
 			Size:  100,
 		},
 	}
+	engine.files = append([]domain.VideoMeta{
+		{Index: 0, Name: "other/The.Big.Bang.Theory.S01E01.720p.BluRay.x264.DUAL-WWW.BLUDV.TV.srt"},
+		{Index: 1, Name: episodeDir + "/The.Big.Bang.Theory.S01E01.720p.BluRay.x264.DUAL-WWW.BLUDV.TV.vtt"},
+		{Index: 9, Name: episodeDir + "/The.Big.Bang.Theory.S01E01.720p.BluRay.x264.DUAL-WWW.BLUDV.TV.srt"},
+		{Index: 2, Name: episodeDir + "/The.Big.Bang.Theory.S01E01.720p.BluRay.x264.DUAL-WWW.BLUDV.TV.srt"},
+	}, engine.videos...)
 
 	kind, firstID, err := service.AddTorrent(&domain.AddTorrentOptions{
 		Magnet: "magnet:?xt=urn:btih:" + packHash,
@@ -57,6 +64,12 @@ func TestAddTorrent_storesEachVideoAndKeepsOneListEntry(t *testing.T) {
 	}
 	if len(episodes) != 2 || episodes[0].FileIndex != 3 || episodes[0].Size != 100 || episodes[1].FileIndex != 7 || episodes[1].Size != 500 {
 		t.Fatalf("episodes %+v", episodes)
+	}
+	if episodes[0].SubtitleIndex == nil || *episodes[0].SubtitleIndex != 2 || episodes[0].SubtitleExt != ".srt" {
+		t.Fatalf("e01 subtitle %+v", episodes[0])
+	}
+	if episodes[1].SubtitleIndex != nil || episodes[1].SubtitleExt != "" {
+		t.Fatalf("e02 subtitle %+v", episodes[1])
 	}
 	if kind != "series" || series.ID != firstID {
 		t.Fatalf("add %s id %d, want series %d", kind, firstID, series.ID)
@@ -96,6 +109,20 @@ func TestAddTorrent_storesEachVideoAndKeepsOneListEntry(t *testing.T) {
 	if listed[0].Name != season {
 		t.Fatalf("pack title %q", listed[0].Name)
 	}
+
+	if err := db.Exec("UPDATE episodes SET subtitle_index = NULL, subtitle_ext = '' WHERE series_id = ?", series.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := LinkSeriesSubtitles(db, packHash, engine.files); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Where("series_id = ?", series.ID).Order("file_index").Find(&episodes).Error; err != nil {
+		t.Fatal(err)
+	}
+	if episodes[0].SubtitleIndex == nil || *episodes[0].SubtitleIndex != 2 || episodes[0].SubtitleExt != ".srt" || episodes[1].SubtitleIndex != nil {
+		t.Fatalf("relinked %+v", episodes)
+	}
+	engine.files = nil
 
 	const movieHash = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 	legacy := persistence.TorrentModel{Hash: movieHash, Name: "old.mkv", Size: 1}
@@ -142,6 +169,7 @@ func TestAddTorrent_storesEachVideoAndKeepsOneListEntry(t *testing.T) {
 
 type fakeEngine struct {
 	videos    []domain.VideoMeta
+	files     []domain.VideoMeta
 	persisted []string
 }
 
@@ -158,6 +186,13 @@ func (f *fakeEngine) ResolveFile(string, int) (*domain.TorrentFile, error) {
 }
 
 func (f *fakeEngine) ListVideos(*domain.MagnetModel) ([]domain.VideoMeta, error) {
+	return f.videos, nil
+}
+
+func (f *fakeEngine) ListFiles(*domain.MagnetModel) ([]domain.VideoMeta, error) {
+	if f.files != nil {
+		return f.files, nil
+	}
 	return f.videos, nil
 }
 
