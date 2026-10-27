@@ -32,13 +32,16 @@ func TestEpisodeSubtitle_servesRangeOr404(t *testing.T) {
 		t.Fatal(err)
 	}
 	subtitleIndex := 4
+	assIndex := 8
+	vttIndex := 5
 	withSub := persistence.EpisodeModel{SeriesID: series.ID, FileIndex: 3, Name: "S01E01.mkv", Size: 10, SubtitleIndex: &subtitleIndex, SubtitleExt: ".srt"}
 	without := persistence.EpisodeModel{SeriesID: series.ID, FileIndex: 7, Name: "S01E02.mkv", Size: 10}
-	if err := db.Create(&withSub).Error; err != nil {
-		t.Fatal(err)
-	}
-	if err := db.Create(&without).Error; err != nil {
-		t.Fatal(err)
+	assSub := persistence.EpisodeModel{SeriesID: series.ID, FileIndex: 9, Name: "S01E03.mkv", Size: 10, SubtitleIndex: &assIndex, SubtitleExt: ".ass"}
+	vttSub := persistence.EpisodeModel{SeriesID: series.ID, FileIndex: 11, Name: "S01E04.mkv", Size: 10, SubtitleIndex: &vttIndex, SubtitleExt: ".vtt"}
+	for _, row := range []*persistence.EpisodeModel{&withSub, &without, &assSub, &vttSub} {
+		if err := db.Create(row).Error; err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	mux := http.NewServeMux()
@@ -69,6 +72,30 @@ func TestEpisodeSubtitle_servesRangeOr404(t *testing.T) {
 	if missingRec.Code != http.StatusNotFound {
 		t.Fatalf("missing status %d", missingRec.Code)
 	}
+
+	vttReq := httptest.NewRequest(http.MethodGet, "/series/"+id(series.ID)+"/episodes/"+id(withSub.ID)+"/subtitle?format=vtt", nil)
+	vttRec := httptest.NewRecorder()
+	mux.ServeHTTP(vttRec, vttReq)
+	if vttRec.Code != http.StatusOK || vttRec.Header().Get("Content-Type") != "text/vtt; charset=utf-8" {
+		t.Fatalf("vtt status %d type %q", vttRec.Code, vttRec.Header().Get("Content-Type"))
+	}
+	if !strings.Contains(vttRec.Body.String(), "WEBVTT") || !strings.Contains(vttRec.Body.String(), "00:00:01.000 --> 00:00:02.000") {
+		t.Fatalf("vtt body %q", vttRec.Body.String())
+	}
+
+	passReq := httptest.NewRequest(http.MethodGet, "/series/"+id(series.ID)+"/episodes/"+id(vttSub.ID)+"/subtitle?format=vtt", nil)
+	passRec := httptest.NewRecorder()
+	mux.ServeHTTP(passRec, passReq)
+	if passRec.Code != http.StatusOK || strings.Contains(passRec.Body.String(), "WEBVTT\n\nWEBVTT") {
+		t.Fatalf("passthrough %d %q", passRec.Code, passRec.Body.String())
+	}
+
+	assReq := httptest.NewRequest(http.MethodGet, "/series/"+id(series.ID)+"/episodes/"+id(assSub.ID)+"/subtitle?format=vtt", nil)
+	assRec := httptest.NewRecorder()
+	mux.ServeHTTP(assRec, assReq)
+	if assRec.Code != http.StatusNotFound {
+		t.Fatalf("ass status %d", assRec.Code)
+	}
 }
 
 func id(value uint) string { return strconv.FormatUint(uint64(value), 10) }
@@ -83,9 +110,16 @@ func (e *subtitleEngine) ResolveMagnet(*enginedomain.MagnetModel) (*enginedomain
 	return e.Resolve("")
 }
 
-func (e *subtitleEngine) ResolveFile(string, int) (*enginedomain.TorrentFile, error) {
-	body := "1\n00:00:01,000 --> 00:00:02,000\nOi\n"
-	return &enginedomain.TorrentFile{Path: "S01E01.srt", Name: "S01E01.srt", Reader: strings.NewReader(body)}, nil
+func (e *subtitleEngine) ResolveFile(_ string, index int) (*enginedomain.TorrentFile, error) {
+	switch index {
+	case 8:
+		return &enginedomain.TorrentFile{Path: "S01E03.ass", Name: "S01E03.ass", Reader: strings.NewReader("[Script Info]\n")}, nil
+	case 5:
+		return &enginedomain.TorrentFile{Path: "S01E04.vtt", Name: "S01E04.vtt", Reader: strings.NewReader("WEBVTT\n\n00:00:01.000 --> 00:00:02.000\nJa\n")}, nil
+	default:
+		body := "1\n00:00:01,000 --> 00:00:02,000\nOi\n"
+		return &enginedomain.TorrentFile{Path: "S01E01.srt", Name: "S01E01.srt", Reader: strings.NewReader(body)}, nil
+	}
 }
 
 func (e *subtitleEngine) ListVideos(*enginedomain.MagnetModel) ([]enginedomain.VideoMeta, error) {
