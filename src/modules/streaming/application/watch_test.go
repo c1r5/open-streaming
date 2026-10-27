@@ -91,4 +91,8 @@ func (e *streamEngine) ListVideos(*enginedomain.MagnetModel) ([]enginedomain.Vid
 	return nil, nil
 }
 
+func (e *streamEngine) ListFiles(*enginedomain.MagnetModel) ([]enginedomain.VideoMeta, error) {
+	return nil, nil
+}
+
 func (e *streamEngine) PersistTorrentFile(string) error { return nil }

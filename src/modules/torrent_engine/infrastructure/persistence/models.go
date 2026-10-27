@@ -38,11 +38,13 @@ func (SeriesModel) TableName() string { return "series" }
 
 type EpisodeModel struct {
 	gorm.Model
-	SeriesID  uint        `gorm:"column:series_id;uniqueIndex:idx_series_file"`
-	Series    SeriesModel `gorm:"foreignKey:SeriesID;references:ID;constraint:OnDelete:CASCADE"`
-	FileIndex int         `gorm:"column:file_index;uniqueIndex:idx_series_file"`
-	Name      string      `gorm:"column:name"`
-	Size      int64       `gorm:"column:size"`
+	SeriesID      uint        `gorm:"column:series_id;uniqueIndex:idx_series_file"`
+	Series        SeriesModel `gorm:"foreignKey:SeriesID;references:ID;constraint:OnDelete:CASCADE"`
+	FileIndex     int         `gorm:"column:file_index;uniqueIndex:idx_series_file"`
+	Name          string      `gorm:"column:name"`
+	Size          int64       `gorm:"column:size"`
+	SubtitleIndex *int        `gorm:"column:subtitle_index"`
+	SubtitleExt   string      `gorm:"column:subtitle_ext"`
 }
 
 func (EpisodeModel) TableName() string { return "episodes" }

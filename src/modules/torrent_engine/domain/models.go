@@ -27,6 +27,7 @@ type ITorrentEngine interface {
 	ResolveMagnet(magnet *MagnetModel) (*TorrentFile, error)
 	ResolveFile(hash string, index int) (*TorrentFile, error)
 	ListVideos(magnet *MagnetModel) ([]VideoMeta, error)
+	ListFiles(magnet *MagnetModel) ([]VideoMeta, error)
 	PersistTorrentFile(hash string) error
 }
 
