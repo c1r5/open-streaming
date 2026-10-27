@@ -46,6 +46,23 @@ func (c *Controller) EpisodeWatch() sharedhttp.HandlerFunc {
 	}
 }
 
+func (c *Controller) EpisodeSubtitle() sharedhttp.HandlerFunc {
+	return func(w stdhttp.ResponseWriter, r *stdhttp.Request) {
+		seriesID, err := strconv.ParseUint(sharedhttp.PathParam(r, "id"), 10, 64)
+		if err != nil {
+			sharedhttp.ErrorJSON(w, stdhttp.StatusBadRequest, "invalid id")
+			return
+		}
+		episodeID, err := strconv.ParseUint(sharedhttp.PathParam(r, "episodeId"), 10, 64)
+		if err != nil {
+			sharedhttp.ErrorJSON(w, stdhttp.StatusBadRequest, "invalid id")
+			return
+		}
+		media, err := c.service.GetEpisodeSubtitle(uint(seriesID), uint(episodeID))
+		c.serve(w, r, media, err)
+	}
+}
+
 func (c *Controller) serve(w stdhttp.ResponseWriter, r *stdhttp.Request, media *streamdomain.TorrentStreamFile, err error) {
 	if err != nil {
 		log.Printf("watch: resolve failed err=%v", err)
@@ -64,6 +81,9 @@ func (c *Controller) serve(w stdhttp.ResponseWriter, r *stdhttp.Request, media *
 		}
 	}()
 
+	if media.ContentType != "" {
+		w.Header().Set("Content-Type", media.ContentType)
+	}
 	w.Header().Set("transferMode.dlna.org", "Streaming")
 	w.Header().Set("contentFeatures.dlna.org",
 		"DLNA.ORG_OP=01;DLNA.ORG_CI=0;DLNA.ORG_FLAGS=01700000000000000000000000000000")

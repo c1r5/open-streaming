@@ -3,6 +3,8 @@ package application
 import (
 	"fmt"
 	"log"
+	"path"
+	"strings"
 
 	streamdomain "github.com/c1r5/open-streaming/src/modules/streaming/domain"
 	enginedomain "github.com/c1r5/open-streaming/src/modules/torrent_engine/domain"
@@ -46,4 +48,36 @@ func (s *Service) GetEpisodeFile(seriesID, episodeID uint) (*streamdomain.Torren
 	}
 	log.Printf("service: resolved episode id=%d file=%s size=%d", episodeID, file.Name, file.Size)
 	return &streamdomain.TorrentStreamFile{Path: file.Path, Reader: file.Reader}, nil
+}
+
+func (s *Service) GetEpisodeSubtitle(seriesID, episodeID uint) (*streamdomain.TorrentStreamFile, error) {
+	var episode persistence.EpisodeModel
+	err := s.db.Preload("Series.Torrent").Where("series_id = ?", seriesID).First(&episode, episodeID).Error
+	if err != nil {
+		return nil, fmt.Errorf("streaming -> episode not found -> %w", err)
+	}
+	if episode.SubtitleIndex == nil {
+		return nil, fmt.Errorf("streaming -> subtitle not found")
+	}
+	log.Printf("service: resolving subtitle series=%d id=%d index=%d", seriesID, episodeID, *episode.SubtitleIndex)
+	file, err := s.engine.ResolveFile(episode.Series.Torrent.Hash, *episode.SubtitleIndex)
+	if err != nil {
+		return nil, err
+	}
+	return &streamdomain.TorrentStreamFile{
+		Path:        file.Path,
+		Reader:      file.Reader,
+		ContentType: subtitleContentType(file.Path),
+	}, nil
+}
+
+func subtitleContentType(name string) string {
+	switch strings.ToLower(path.Ext(name)) {
+	case ".vtt":
+		return "text/vtt; charset=utf-8"
+	case ".ass", ".ssa":
+		return "text/x-ssa; charset=utf-8"
+	default:
+		return "text/srt; charset=utf-8"
+	}
 }
