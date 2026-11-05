@@ -47,12 +47,79 @@ type MagnetModel struct {
 
 func (t MagnetModel) Trackers() []string {
 	trackers := make([]string, 0, len(t.Sources))
+	seen := make(map[string]struct{}, len(t.Sources))
 	for _, s := range t.Sources {
-		if after, ok := strings.CutPrefix(s, "tracker:"); ok {
-			trackers = append(trackers, after)
+		tr, ok := SupportedTracker(s)
+		if !ok {
+			continue
 		}
+		if _, dup := seen[tr]; dup {
+			continue
+		}
+		seen[tr] = struct{}{}
+		trackers = append(trackers, tr)
 	}
 	return trackers
+}
+
+// SupportedTracker returns a tracker URL anacrolix can announce to.
+// Torrentio sources and some magnets prefix the URL with "tracker:".
+// Any other scheme reaches tracker.NewClient and panics the process with "unknown scheme".
+func SupportedTracker(raw string) (string, bool) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" || raw[0] == '*' {
+		return "", false
+	}
+	for {
+		after, ok := strings.CutPrefix(raw, "tracker:")
+		if !ok {
+			break
+		}
+		raw = strings.TrimSpace(after)
+	}
+	u, err := url.Parse(raw)
+	if err != nil || u.Host == "" {
+		return "", false
+	}
+	switch strings.ToLower(u.Scheme) {
+	case "http", "https", "udp", "udp4", "udp6", "ws", "wss":
+		return raw, true
+	default:
+		return "", false
+	}
+}
+
+func trackerSource(raw string) (string, bool) {
+	clean, ok := SupportedTracker(raw)
+	if !ok {
+		return "", false
+	}
+	return "tracker:" + clean, true
+}
+
+// SanitizeAnnounce drops announce URLs that would panic the torrent client.
+func SanitizeAnnounce(mi *metainfo.MetaInfo) {
+	if mi == nil {
+		return
+	}
+	if tr, ok := SupportedTracker(mi.Announce); ok {
+		mi.Announce = tr
+	} else {
+		mi.Announce = ""
+	}
+	filtered := make(metainfo.AnnounceList, 0, len(mi.AnnounceList))
+	for _, tier := range mi.AnnounceList {
+		kept := make([]string, 0, len(tier))
+		for _, raw := range tier {
+			if tr, ok := SupportedTracker(raw); ok {
+				kept = append(kept, tr)
+			}
+		}
+		if len(kept) > 0 {
+			filtered = append(filtered, kept)
+		}
+	}
+	mi.AnnounceList = filtered
 }
 
 func (t MagnetModel) Magnet() string {
@@ -78,7 +145,9 @@ func Parse(magnetURI string) (*MagnetModel, error) {
 			info.Hash = magnetV2.InfoHash.Value.HexString()
 			info.Name = magnetV2.DisplayName
 			for _, tr := range magnetV2.Trackers {
-				info.Sources = append(info.Sources, "tracker:"+tr)
+				if source, ok := trackerSource(tr); ok {
+					info.Sources = append(info.Sources, source)
+				}
 			}
 			return info, nil
 		}
@@ -89,7 +158,9 @@ func Parse(magnetURI string) (*MagnetModel, error) {
 		info.Hash = magnetV1.InfoHash.HexString()
 		info.Name = magnetV1.DisplayName
 		for _, tr := range magnetV1.Trackers {
-			info.Sources = append(info.Sources, "tracker:"+tr)
+			if source, ok := trackerSource(tr); ok {
+				info.Sources = append(info.Sources, source)
+			}
 		}
 		return info, nil
 	}

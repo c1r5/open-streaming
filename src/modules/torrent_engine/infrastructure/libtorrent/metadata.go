@@ -22,11 +22,17 @@ func (t *TorrentEngine) fetchMeta(magnetModel *domain.MagnetModel) (*TorrentMeta
 
 	var torrent *libtorrent.Torrent
 
-	if _, err := os.Stat(torrentPath); err == nil {
+	if _, statErr := os.Stat(torrentPath); statErr == nil {
 		log.Printf("engine: loading from .torrent file (hash=%s)", magnetModel.Hash)
-		torrent, err = t.client.AddTorrentFromFile(torrentPath)
-		if err != nil {
-			return nil, fmt.Errorf("engine: add from file: %w", err)
+		mi, loadErr := metainfo.LoadFromFile(torrentPath)
+		if loadErr != nil {
+			return nil, fmt.Errorf("engine: add from file: %w", loadErr)
+		}
+		domain.SanitizeAnnounce(mi)
+		var addErr error
+		torrent, addErr = t.client.AddTorrent(mi)
+		if addErr != nil {
+			return nil, fmt.Errorf("engine: add from file: %w", addErr)
 		}
 	} else {
 		log.Printf("engine: fetching metadata via magnet (hash=%s)", magnetModel.Hash)
