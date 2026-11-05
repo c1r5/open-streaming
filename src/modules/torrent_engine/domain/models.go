@@ -29,6 +29,10 @@ type ITorrentEngine interface {
 	ListVideos(magnet *MagnetModel) ([]VideoMeta, error)
 	ListFiles(magnet *MagnetModel) ([]VideoMeta, error)
 	PersistTorrentFile(hash string) error
+	// Remove stops the swarm and deletes the torrent's content files.
+	// The <hash>.torrent sidecar stays until RemoveTorrentFile.
+	Remove(hash string) error
+	RemoveTorrentFile(hash string) error
 }
 
 type MagnetModel struct {

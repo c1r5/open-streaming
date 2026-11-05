@@ -66,8 +66,34 @@ func (c *Controller) AddHandler() sharedhttp.HandlerFunc {
 	}
 }
 
-func (c *Controller) DeleteHandler() sharedhttp.HandlerFunc {
-	return func(w stdhttp.ResponseWriter, r *stdhttp.Request) {}
+func (c *Controller) DeleteMovieHandler() sharedhttp.HandlerFunc {
+	return func(w stdhttp.ResponseWriter, r *stdhttp.Request) {
+		c.deleteByID(w, r, "movie not found", c.service.DeleteMovie)
+	}
+}
+
+func (c *Controller) DeleteSeriesHandler() sharedhttp.HandlerFunc {
+	return func(w stdhttp.ResponseWriter, r *stdhttp.Request) {
+		c.deleteByID(w, r, "series not found", c.service.DeleteSeries)
+	}
+}
+
+func (c *Controller) deleteByID(w stdhttp.ResponseWriter, r *stdhttp.Request, missing string, remove func(uint) error) {
+	id, err := strconv.ParseUint(sharedhttp.PathParam(r, "id"), 10, 64)
+	if err != nil {
+		sharedhttp.ErrorJSON(w, stdhttp.StatusBadRequest, "invalid id")
+		return
+	}
+	err = remove(uint(id))
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		sharedhttp.ErrorJSON(w, stdhttp.StatusNotFound, missing)
+		return
+	}
+	if err != nil {
+		sharedhttp.ErrorJSON(w, stdhttp.StatusInternalServerError, err.Error())
+		return
+	}
+	w.WriteHeader(stdhttp.StatusNoContent)
 }
 
 func (c *Controller) MoviesHandler() sharedhttp.HandlerFunc {

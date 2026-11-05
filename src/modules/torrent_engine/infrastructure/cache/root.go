@@ -3,6 +3,7 @@ package cache
 import (
 	"errors"
 	"log"
+	"strings"
 	"sync"
 	"time"
 
@@ -83,6 +84,15 @@ func (c *Cache[V]) Retrieve(key string, fetch func() (V, error)) (V, error) {
 		return zero, err
 	}
 	return v.(V), nil
+}
+
+func (c *Cache[V]) DeletePrefix(prefix string) {
+	c.store.Range(func(k, _ any) bool {
+		if strings.HasPrefix(k.(string), prefix) {
+			c.store.Delete(k)
+		}
+		return true
+	})
 }
 
 func (c *Cache[V]) Get(key string) (V, error) {

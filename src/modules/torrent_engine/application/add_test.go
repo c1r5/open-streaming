@@ -201,6 +201,10 @@ func (f *fakeEngine) PersistTorrentFile(hash string) error {
 	return nil
 }
 
+func (f *fakeEngine) Remove(string) error { return nil }
+
+func (f *fakeEngine) RemoveTorrentFile(string) error { return nil }
+
 func openTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 	db, err := gorm.Open(gormlite.Open(":memory:"), &gorm.Config{})

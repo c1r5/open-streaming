@@ -80,8 +80,11 @@ func (m *TorrentModule) registerRoutes() {
 	m.mux.HandleFunc("POST /torrent/add", func(w http.ResponseWriter, r *http.Request) {
 		m.c.AddHandler()(w, r)
 	})
-	m.mux.HandleFunc("GET /torrent/delete/{id}", func(w http.ResponseWriter, r *http.Request) {
-		m.c.DeleteHandler()(w, r)
+	m.mux.HandleFunc("DELETE /movies/{id}", func(w http.ResponseWriter, r *http.Request) {
+		m.c.DeleteMovieHandler()(w, r)
+	})
+	m.mux.HandleFunc("DELETE /series/{id}", func(w http.ResponseWriter, r *http.Request) {
+		m.c.DeleteSeriesHandler()(w, r)
 	})
 	m.mux.HandleFunc("GET /torrent/search", func(w http.ResponseWriter, r *http.Request) {
 		m.c.SearchHandler()(w, r)

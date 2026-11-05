@@ -272,6 +272,37 @@ func (s *Service) DeleteTorrent(hash string) error {
 	return (&persistence.TorrentModel{Hash: hash}).Delete(s.db)
 }
 
+func (s *Service) DeleteMovie(id uint) error {
+	var movie persistence.MovieModel
+	if err := s.db.Preload("Torrent").First(&movie, id).Error; err != nil {
+		return err
+	}
+	return s.deleteStoredTorrent(movie.Torrent.Hash)
+}
+
+func (s *Service) DeleteSeries(id uint) error {
+	var series persistence.SeriesModel
+	if err := s.db.Preload("Torrent").First(&series, id).Error; err != nil {
+		return err
+	}
+	return s.deleteStoredTorrent(series.Torrent.Hash)
+}
+
+func (s *Service) deleteStoredTorrent(hash string) error {
+	if s.torrentEngine != nil {
+		if err := s.torrentEngine.Remove(hash); err != nil {
+			return err
+		}
+	}
+	if err := s.DeleteTorrent(hash); err != nil {
+		return err
+	}
+	if s.torrentEngine != nil {
+		return s.torrentEngine.RemoveTorrentFile(hash)
+	}
+	return nil
+}
+
 func (s *Service) SearchTorrents(query string) ([]*catalogdomain.TorrentSearchResult, error) {
 	log.Printf("Searching for torrents with query: %s", query)
 	results, err := s.torrentSearch.Search(query)
