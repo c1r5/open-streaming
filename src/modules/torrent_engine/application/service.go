@@ -288,6 +288,33 @@ func (s *Service) DeleteSeries(id uint) error {
 	return s.deleteStoredTorrent(series.Torrent.Hash)
 }
 
+func (s *Service) DeleteEpisode(seriesID, episodeID uint) error {
+	var episode persistence.EpisodeModel
+	err := s.db.Preload("Series.Torrent").Where("id = ? AND series_id = ?", episodeID, seriesID).First(&episode).Error
+	if err != nil {
+		return err
+	}
+	var count int64
+	if err := s.db.Model(&persistence.EpisodeModel{}).Where("series_id = ?", seriesID).Count(&count).Error; err != nil {
+		return err
+	}
+	hash := episode.Series.Torrent.Hash
+	if count <= 1 {
+		return s.deleteStoredTorrent(hash)
+	}
+	if s.torrentEngine != nil {
+		if err := s.torrentEngine.RemoveFile(hash, episode.FileIndex); err != nil {
+			return err
+		}
+		if episode.SubtitleIndex != nil {
+			if err := s.torrentEngine.RemoveFile(hash, *episode.SubtitleIndex); err != nil {
+				return err
+			}
+		}
+	}
+	return s.db.Delete(&persistence.EpisodeModel{}, episode.ID).Error
+}
+
 func (s *Service) deleteStoredTorrent(hash string) error {
 	if s.torrentEngine != nil {
 		if err := s.torrentEngine.Remove(hash); err != nil {

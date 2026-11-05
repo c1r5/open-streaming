@@ -86,6 +86,10 @@ func (c *Cache[V]) Retrieve(key string, fetch func() (V, error)) (V, error) {
 	return v.(V), nil
 }
 
+func (c *Cache[V]) Delete(key string) {
+	c.store.Delete(key)
+}
+
 func (c *Cache[V]) DeletePrefix(prefix string) {
 	c.store.Range(func(k, _ any) bool {
 		if strings.HasPrefix(k.(string), prefix) {

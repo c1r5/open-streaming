@@ -135,3 +135,7 @@ func (e *subtitleEngine) PersistTorrentFile(string) error { return nil }
 func (e *subtitleEngine) Remove(string) error { return nil }
 
 func (e *subtitleEngine) RemoveTorrentFile(string) error { return nil }
+
+func (e *subtitleEngine) RemoveFile(string, int) error { return nil }
+
+func (e *subtitleEngine) IgnoreFiles(string, []int) error { return nil }

@@ -78,6 +78,31 @@ func (c *Controller) DeleteSeriesHandler() sharedhttp.HandlerFunc {
 	}
 }
 
+func (c *Controller) DeleteEpisodeHandler() sharedhttp.HandlerFunc {
+	return func(w stdhttp.ResponseWriter, r *stdhttp.Request) {
+		seriesID, err := strconv.ParseUint(sharedhttp.PathParam(r, "id"), 10, 64)
+		if err != nil {
+			sharedhttp.ErrorJSON(w, stdhttp.StatusBadRequest, "invalid id")
+			return
+		}
+		episodeID, err := strconv.ParseUint(sharedhttp.PathParam(r, "episodeId"), 10, 64)
+		if err != nil {
+			sharedhttp.ErrorJSON(w, stdhttp.StatusBadRequest, "invalid id")
+			return
+		}
+		err = c.service.DeleteEpisode(uint(seriesID), uint(episodeID))
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			sharedhttp.ErrorJSON(w, stdhttp.StatusNotFound, "episode not found")
+			return
+		}
+		if err != nil {
+			sharedhttp.ErrorJSON(w, stdhttp.StatusInternalServerError, err.Error())
+			return
+		}
+		w.WriteHeader(stdhttp.StatusNoContent)
+	}
+}
+
 func (c *Controller) deleteByID(w stdhttp.ResponseWriter, r *stdhttp.Request, missing string, remove func(uint) error) {
 	id, err := strconv.ParseUint(sharedhttp.PathParam(r, "id"), 10, 64)
 	if err != nil {

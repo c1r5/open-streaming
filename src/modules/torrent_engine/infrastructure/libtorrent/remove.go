@@ -24,6 +24,63 @@ func (t *TorrentEngine) Remove(hash string) error {
 	return nil
 }
 
+func (t *TorrentEngine) RemoveFile(hash string, index int) error {
+	rels, err := t.contentRels(hash)
+	if err != nil {
+		return err
+	}
+	if index < 0 || index >= len(rels) {
+		return fmt.Errorf("engine: remove: file index %d not in torrent", index)
+	}
+	if tor := t.ensureLoaded(hash); tor != nil {
+		files := tor.Files()
+		if index < len(files) {
+			files[index].SetPriority(libtorrent.PiecePriorityNone)
+		}
+	}
+	if t.fileCache != nil {
+		t.fileCache.Delete(hash)
+		t.fileCache.Delete(fmt.Sprintf("%s:%d", hash, index))
+	}
+	return t.removeContent(rels[index])
+}
+
+func (t *TorrentEngine) IgnoreFiles(hash string, indexes []int) error {
+	if !torrentHash(hash) {
+		return fmt.Errorf("engine: remove: invalid hash")
+	}
+	tor := t.ensureLoaded(hash)
+	if tor == nil {
+		return fmt.Errorf("engine: remove: torrent files unknown")
+	}
+	files := tor.Files()
+	for _, index := range indexes {
+		if index < 0 || index >= len(files) {
+			return fmt.Errorf("engine: remove: file index %d not in torrent", index)
+		}
+		files[index].SetPriority(libtorrent.PiecePriorityNone)
+	}
+	return nil
+}
+
+func (t *TorrentEngine) ensureLoaded(hash string) *libtorrent.Torrent {
+	if tor := t.loaded(hash); tor != nil {
+		return tor
+	}
+	if t.client == nil {
+		return nil
+	}
+	path := filepath.Join(t.dataDir, hash+".torrent")
+	if _, err := os.Stat(path); err != nil {
+		return nil
+	}
+	tor, err := t.client.AddTorrentFromFile(path)
+	if err != nil {
+		return nil
+	}
+	return tor
+}
+
 func (t *TorrentEngine) RemoveTorrentFile(hash string) error {
 	if !torrentHash(hash) {
 		return fmt.Errorf("engine: remove: invalid hash")

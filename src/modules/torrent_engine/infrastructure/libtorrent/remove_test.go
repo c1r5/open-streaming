@@ -100,3 +100,73 @@ func TestRemoveDeletesContentInsideDataDir(t *testing.T) {
 		t.Fatalf("sidecar stat %v", err)
 	}
 }
+
+func TestRemoveFileDeletesOnlyThatFile(t *testing.T) {
+	dir := t.TempDir()
+	show := filepath.Join(dir, "Show")
+	if err := os.MkdirAll(show, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	first := filepath.Join(show, "e01.mkv")
+	second := filepath.Join(show, "e02.mkv")
+	subtitle := filepath.Join(show, "e01.srt")
+	for _, path := range []string{first, second, subtitle, first + ".part"} {
+		if err := os.WriteFile(path, []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	const hash = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	info := metainfo.Info{
+		Name:        "Show",
+		PieceLength: 16 * 1024,
+		Files: []metainfo.FileInfo{
+			{Path: []string{"e01.mkv"}, Length: 1},
+			{Path: []string{"e01.srt"}, Length: 1},
+			{Path: []string{"e02.mkv"}, Length: 1},
+		},
+	}
+	payload, err := bencode.Marshal(info)
+	if err != nil {
+		t.Fatal(err)
+	}
+	meta := metainfo.MetaInfo{InfoBytes: payload}
+	sidecar := filepath.Join(dir, hash+".torrent")
+	file, err := os.Create(sidecar)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := meta.Write(file); err != nil {
+		file.Close()
+		t.Fatal(err)
+	}
+	file.Close()
+
+	engine, err := NewEngine(nil, nil, EngineOptions{DataDir: dir})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := engine.RemoveFile(hash, 0); err != nil {
+		t.Fatal(err)
+	}
+	if err := engine.RemoveFile(hash, 1); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(first); !os.IsNotExist(err) {
+		t.Fatalf("e01 stat %v", err)
+	}
+	if _, err := os.Stat(first + ".part"); !os.IsNotExist(err) {
+		t.Fatalf("e01 part stat %v", err)
+	}
+	if _, err := os.Stat(subtitle); !os.IsNotExist(err) {
+		t.Fatalf("subtitle stat %v", err)
+	}
+	if _, err := os.Stat(second); err != nil {
+		t.Fatalf("e02 %v", err)
+	}
+	if _, err := os.Stat(sidecar); err != nil {
+		t.Fatalf("sidecar %v", err)
+	}
+	if err := engine.RemoveFile(hash, 9); err == nil {
+		t.Fatal("missing index returned nil")
+	}
+}

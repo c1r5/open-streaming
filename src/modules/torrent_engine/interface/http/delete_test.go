@@ -105,6 +105,108 @@ func TestDeleteMovieAndSeriesRemovesListRowAndTorrent(t *testing.T) {
 	}
 }
 
+func TestDeleteEpisodeRemovesFileUntilTheLastOneRemovesTheSeries(t *testing.T) {
+	db, err := gorm.Open(gormlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AutoMigrate(&persistence.TorrentModel{}, &persistence.MovieModel{}, &persistence.SeriesModel{}, &persistence.EpisodeModel{}); err != nil {
+		t.Fatal(err)
+	}
+	torrent := persistence.TorrentModel{Hash: "dddddddddddddddddddddddddddddddddddddddd", Name: "Show", Size: 30}
+	if err := db.Create(&torrent).Error; err != nil {
+		t.Fatal(err)
+	}
+	series := persistence.SeriesModel{TorrentID: torrent.ID}
+	if err := db.Create(&series).Error; err != nil {
+		t.Fatal(err)
+	}
+	subtitle := 2
+	first := persistence.EpisodeModel{SeriesID: series.ID, FileIndex: 1, Name: "e01.mkv", Size: 10, SubtitleIndex: &subtitle, SubtitleExt: ".srt"}
+	second := persistence.EpisodeModel{SeriesID: series.ID, FileIndex: 3, Name: "e02.mkv", Size: 20}
+	for _, row := range []*persistence.EpisodeModel{&first, &second} {
+		if err := db.Create(row).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	engine := &deleteEngine{}
+	controller := NewController(application.NewService(&application.ServiceOptions{DB: db, TorrentEngine: engine}))
+
+	engine.fail = errors.New("disk")
+	status, body := deleteEpisode(t, controller, series.ID, first.ID)
+	if status != http.StatusInternalServerError || body != `{"error":"disk"}`+"\n" {
+		t.Fatalf("failed episode delete status %d body %q", status, body)
+	}
+	left := listedEpisodes(t, controller, series.ID)
+	if len(left) != 2 {
+		t.Fatalf("episodes after disk error %+v", left)
+	}
+	if len(engine.files) != 0 || len(engine.removed) != 0 {
+		t.Fatalf("engine changed on failure %#v %#v", engine.files, engine.removed)
+	}
+
+	engine.fail = nil
+	status, body = deleteEpisode(t, controller, series.ID, first.ID)
+	if status != http.StatusNoContent || body != "" {
+		t.Fatalf("delete episode status %d body %q", status, body)
+	}
+	if len(engine.removed) != 0 || len(engine.sidecars) != 0 || len(engine.files) != 2 || engine.files[0] != (removedFile{torrent.Hash, 1}) || engine.files[1] != (removedFile{torrent.Hash, 2}) {
+		t.Fatalf("partial engine removed %#v sidecars %#v files %#v", engine.removed, engine.sidecars, engine.files)
+	}
+	left = listedEpisodes(t, controller, series.ID)
+	if len(left) != 1 || left[0].ID != second.ID || left[0].Name != "e02.mkv" {
+		t.Fatalf("episodes left %+v", left)
+	}
+	seriesRows := listSeries(t, controller)
+	if len(seriesRows) != 1 || seriesRows[0].ID != series.ID {
+		t.Fatalf("series after one episode %+v", seriesRows)
+	}
+
+	status, body = deleteEpisode(t, controller, series.ID, 999)
+	if status != http.StatusNotFound || body != `{"error":"episode not found"}`+"\n" {
+		t.Fatalf("missing episode status %d body %q", status, body)
+	}
+
+	status, body = deleteEpisode(t, controller, series.ID, second.ID)
+	if status != http.StatusNoContent || body != "" {
+		t.Fatalf("delete last episode status %d body %q", status, body)
+	}
+	if len(engine.removed) != 1 || engine.removed[0] != torrent.Hash || len(engine.sidecars) != 1 || engine.sidecars[0] != torrent.Hash {
+		t.Fatalf("last episode engine %#v %#v", engine.removed, engine.sidecars)
+	}
+	if rows := listSeries(t, controller); len(rows) != 0 {
+		t.Fatalf("series left %+v", rows)
+	}
+	status, body = episodes(t, controller, series.ID)
+	if status != http.StatusNotFound || body != `{"error":"series not found"}`+"\n" {
+		t.Fatalf("episodes after last delete status %d body %q", status, body)
+	}
+}
+
+func deleteEpisode(t *testing.T, controller *Controller, seriesID, episodeID uint) (int, string) {
+	t.Helper()
+	request := httptest.NewRequest(http.MethodDelete, "/", nil)
+	request.SetPathValue("id", strconv.FormatUint(uint64(seriesID), 10))
+	request.SetPathValue("episodeId", strconv.FormatUint(uint64(episodeID), 10))
+	recorder := httptest.NewRecorder()
+	controller.DeleteEpisodeHandler()(recorder, request)
+	return recorder.Code, recorder.Body.String()
+}
+
+func listedEpisodes(t *testing.T, controller *Controller, seriesID uint) []application.ListedEpisode {
+	t.Helper()
+	status, body := episodes(t, controller, seriesID)
+	if status != http.StatusOK {
+		t.Fatalf("list episodes %d %s", status, body)
+	}
+	var items []application.ListedEpisode
+	if err := json.Unmarshal([]byte(body), &items); err != nil {
+		t.Fatal(err)
+	}
+	return items
+}
+
 func deleteID(t *testing.T, handler func(http.ResponseWriter, *http.Request), id uint) (int, string) {
 	t.Helper()
 	request := httptest.NewRequest(http.MethodDelete, "/", nil)
@@ -151,9 +253,15 @@ func episodes(t *testing.T, controller *Controller, id uint) (int, string) {
 	return recorder.Code, recorder.Body.String()
 }
 
+type removedFile struct {
+	hash  string
+	index int
+}
+
 type deleteEngine struct {
 	removed  []string
 	sidecars []string
+	files    []removedFile
 	fail     error
 }
 
@@ -173,6 +281,16 @@ func (e *deleteEngine) ListFiles(*domain.MagnetModel) ([]domain.VideoMeta, error
 	return nil, nil
 }
 func (e *deleteEngine) PersistTorrentFile(string) error { return nil }
+func (e *deleteEngine) RemoveFile(hash string, index int) error {
+	if e.fail != nil {
+		return e.fail
+	}
+	e.files = append(e.files, removedFile{hash, index})
+	return nil
+}
+
+func (e *deleteEngine) IgnoreFiles(string, []int) error { return nil }
+
 func (e *deleteEngine) Remove(hash string) error {
 	if e.fail != nil {
 		return e.fail
