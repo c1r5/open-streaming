@@ -1,6 +1,7 @@
 package torrent_engine
 
 import (
+	"errors"
 	"log"
 	"net/http"
 	"time"
@@ -46,19 +47,55 @@ func warmUpEngine(eng domain.ITorrentEngine, db *gorm.DB) {
 	}
 	for _, t := range torrents {
 		hash := t.Hash
+		torrentID := t.ID
 		go func() {
-			if _, err := eng.Resolve(hash); err != nil {
-				log.Printf("engine warm-up: failed for hash=%s: %v", hash, err)
+			var series persistence.SeriesModel
+			err := db.Where("torrent_id = ?", torrentID).First(&series).Error
+			if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+				log.Printf("engine warm-up: series query failed for hash=%s: %v", hash, err)
 				return
 			}
-			log.Printf("engine warm-up: ready (hash=%s)", hash)
-			if err := eng.PersistTorrentFile(hash); err != nil {
-				log.Printf("warn: could not persist .torrent for hash=%s: %v", hash, err)
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				if _, err := eng.Resolve(hash); err != nil {
+					log.Printf("engine warm-up: failed for hash=%s: %v", hash, err)
+					return
+				}
+				log.Printf("engine warm-up: ready (hash=%s)", hash)
+				if err := eng.PersistTorrentFile(hash); err != nil {
+					log.Printf("warn: could not persist .torrent for hash=%s: %v", hash, err)
+				}
+				return
 			}
+
 			files, err := eng.ListFiles(&domain.MagnetModel{Hash: hash})
 			if err != nil {
 				log.Printf("engine warm-up: file list failed for hash=%s: %v", hash, err)
 				return
+			}
+			var episodes []persistence.EpisodeModel
+			if err := db.Where("series_id = ?", series.ID).Find(&episodes).Error; err != nil {
+				log.Printf("engine warm-up: episode query failed for hash=%s: %v", hash, err)
+				return
+			}
+			keep := map[int]bool{}
+			for _, episode := range episodes {
+				keep[episode.FileIndex] = true
+				if episode.SubtitleIndex != nil {
+					keep[*episode.SubtitleIndex] = true
+				}
+			}
+			ignore := make([]int, 0)
+			for _, file := range files {
+				if !keep[file.Index] {
+					ignore = append(ignore, file.Index)
+				}
+			}
+			if err := eng.IgnoreFiles(hash, ignore); err != nil {
+				log.Printf("engine warm-up: ignore files failed for hash=%s: %v", hash, err)
+			}
+			log.Printf("engine warm-up: ready (hash=%s)", hash)
+			if err := eng.PersistTorrentFile(hash); err != nil {
+				log.Printf("warn: could not persist .torrent for hash=%s: %v", hash, err)
 			}
 			if err := application.LinkSeriesSubtitles(db, hash, files); err != nil {
 				log.Printf("engine warm-up: subtitle link failed for hash=%s: %v", hash, err)
@@ -80,8 +117,14 @@ func (m *TorrentModule) registerRoutes() {
 	m.mux.HandleFunc("POST /torrent/add", func(w http.ResponseWriter, r *http.Request) {
 		m.c.AddHandler()(w, r)
 	})
-	m.mux.HandleFunc("GET /torrent/delete/{id}", func(w http.ResponseWriter, r *http.Request) {
-		m.c.DeleteHandler()(w, r)
+	m.mux.HandleFunc("DELETE /movies/{id}", func(w http.ResponseWriter, r *http.Request) {
+		m.c.DeleteMovieHandler()(w, r)
+	})
+	m.mux.HandleFunc("DELETE /series/{id}", func(w http.ResponseWriter, r *http.Request) {
+		m.c.DeleteSeriesHandler()(w, r)
+	})
+	m.mux.HandleFunc("DELETE /series/{id}/episodes/{episodeId}", func(w http.ResponseWriter, r *http.Request) {
+		m.c.DeleteEpisodeHandler()(w, r)
 	})
 	m.mux.HandleFunc("GET /torrent/search", func(w http.ResponseWriter, r *http.Request) {
 		m.c.SearchHandler()(w, r)

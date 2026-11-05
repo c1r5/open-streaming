@@ -113,3 +113,11 @@ func (e *streamEngine) ListFiles(*enginedomain.MagnetModel) ([]enginedomain.Vide
 }
 
 func (e *streamEngine) PersistTorrentFile(string) error { return nil }
+
+func (e *streamEngine) Remove(string) error { return nil }
+
+func (e *streamEngine) RemoveTorrentFile(string) error { return nil }
+
+func (e *streamEngine) RemoveFile(string, int) error { return nil }
+
+func (e *streamEngine) IgnoreFiles(string, []int) error { return nil }
