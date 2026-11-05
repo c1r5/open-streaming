@@ -157,7 +157,7 @@ func loadFromEnv() *Config {
 		},
 		Torrent: TorrentConfig{
 			SearchCacheTTLMinutes: envInt("TORRENT_SEARCH_CACHE_TTL_MINUTES", 5),
-			AddTimeoutSeconds:     envInt("TORRENT_ADD_TIMEOUT_SECONDS", 15),
+			AddTimeoutSeconds:     envInt("TORRENT_ADD_TIMEOUT_SECONDS", 120),
 		},
 		Database: DatabaseConfig{
 			DSN: envString("DATABASE_DSN", ""),

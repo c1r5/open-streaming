@@ -75,7 +75,7 @@ FFmpeg/ffprobe wrappers and a `[transcode]` config block exist under `src/module
 | --- | --- | --- |
 | `GET` | `/healthz` | Liveness. |
 | `GET` | `/torrent/search?q=` | IMDb title search, then Torrentio streams. First 10 cached results. |
-| `POST` | `/torrent/add` | JSON `{"hash":"<info-hash>"}` or `{"magnet":"magnet:?xt=urn:btih:..."}`. A hash must be in the search cache. Returns `{"kind":"movie","id":n}` or `{"kind":"series","id":n}`. Times out after `[torrent] add_timeout_seconds` (default 15). |
+| `POST` | `/torrent/add` | JSON `{"hash":"<info-hash>"}` or `{"magnet":"magnet:?xt=urn:btih:..."}`. A hash must be in the search cache. Returns `{"kind":"movie","id":n}` or `{"kind":"series","id":n}`. Times out after `TORRENT_ADD_TIMEOUT_SECONDS` (default 120). |
 | `DELETE` | `/movies/{id}` | 204. Drops the swarm, deletes the movie's files under the data dir, then the database row. `<hash>.torrent` goes after the row. 404 if the id is missing. 500 if the files cannot be located, and the row stays. |
 | `DELETE` | `/series/{id}` | Same as the movie delete, for the series, its episodes, and their torrent. |
 | `DELETE` | `/series/{id}/episodes/{episodeId}` | 204. Deletes that episode's file and its linked subtitle, and sets their priority to none. The swarm and the other episodes stay. The last episode deletes the series the same way as `DELETE /series/{id}`. 404 if the episode is missing. |
