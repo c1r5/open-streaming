@@ -1,11 +1,9 @@
 package http
 
 import (
-	"context"
 	"errors"
 	stdhttp "net/http"
 	"strconv"
-	"time"
 
 	"github.com/c1r5/open-streaming/src/modules/torrent_engine/application"
 	"github.com/c1r5/open-streaming/src/modules/torrent_engine/domain"
@@ -27,42 +25,23 @@ func (c *Controller) AddHandler() sharedhttp.HandlerFunc {
 			return
 		}
 
-		if body.Magnet == "" && body.Hash == "" {
-			sharedhttp.ErrorJSON(w, stdhttp.StatusBadRequest, "hash or magnet required")
+		status, code, err := c.service.BeginAdd(&body)
+		if err != nil {
+			sharedhttp.ErrorJSON(w, code, err.Error())
 			return
 		}
-		if body.Magnet != "" {
-			if _, err := domain.Parse(body.Magnet); err != nil {
-				sharedhttp.ErrorJSON(w, stdhttp.StatusBadRequest, err.Error())
-				return
-			}
-		}
+		sharedhttp.JSON(w, code, status)
+	}
+}
 
-		timeout := time.Duration(config.Get().Torrent.AddTimeoutSeconds) * time.Second
-		tctx, cancel := context.WithTimeout(r.Context(), timeout)
-		defer cancel()
-
-		type result struct {
-			kind string
-			id   uint
-			err  error
+func (c *Controller) StatusHandler() sharedhttp.HandlerFunc {
+	return func(w stdhttp.ResponseWriter, r *stdhttp.Request) {
+		status, err := c.service.TorrentStatus(sharedhttp.PathParam(r, "hash"))
+		if err != nil {
+			sharedhttp.ErrorJSON(w, application.StatusCode(err), err.Error())
+			return
 		}
-		ch := make(chan result, 1)
-		go func() {
-			kind, id, err := c.service.AddTorrent(&body)
-			ch <- result{kind, id, err}
-		}()
-
-		select {
-		case res := <-ch:
-			if res.err != nil {
-				sharedhttp.ErrorJSON(w, stdhttp.StatusInternalServerError, res.err.Error())
-				return
-			}
-			sharedhttp.JSON(w, stdhttp.StatusCreated, map[string]any{"kind": res.kind, "id": res.id})
-		case <-tctx.Done():
-			sharedhttp.ErrorJSON(w, stdhttp.StatusGatewayTimeout, "request timed out")
-		}
+		sharedhttp.JSON(w, stdhttp.StatusOK, status)
 	}
 }
 

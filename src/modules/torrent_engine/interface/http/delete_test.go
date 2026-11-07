@@ -291,6 +291,8 @@ func (e *deleteEngine) RemoveFile(hash string, index int) error {
 
 func (e *deleteEngine) IgnoreFiles(string, []int) error { return nil }
 
+func (e *deleteEngine) Swarm(string) (domain.SwarmView, bool) { return domain.SwarmView{}, false }
+
 func (e *deleteEngine) Remove(hash string) error {
 	if e.fail != nil {
 		return e.fail

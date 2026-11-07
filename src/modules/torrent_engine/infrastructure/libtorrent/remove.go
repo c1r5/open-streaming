@@ -8,6 +8,7 @@ import (
 
 	libtorrent "github.com/anacrolix/torrent"
 	"github.com/anacrolix/torrent/metainfo"
+	"github.com/c1r5/open-streaming/src/modules/torrent_engine/domain"
 )
 
 func (t *TorrentEngine) Remove(hash string) error {
@@ -153,6 +154,18 @@ func (t *TorrentEngine) drop(hash string) {
 	if t.fileCache != nil {
 		t.fileCache.DeletePrefix(hash)
 	}
+}
+
+func (t *TorrentEngine) Swarm(hash string) (domain.SwarmView, bool) {
+	tor := t.loaded(hash)
+	if tor == nil {
+		return domain.SwarmView{}, false
+	}
+	view := domain.SwarmView{Peers: tor.Stats().ActivePeers}
+	if info := tor.Info(); info != nil {
+		view.Name = info.Name
+	}
+	return view, true
 }
 
 func (t *TorrentEngine) loaded(hash string) *libtorrent.Torrent {

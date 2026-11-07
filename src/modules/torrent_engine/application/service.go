@@ -6,6 +6,7 @@ import (
 	"log"
 	"path"
 	"strings"
+	"sync"
 
 	catalogdomain "github.com/c1r5/open-streaming/src/modules/catalog/domain"
 	"github.com/c1r5/open-streaming/src/modules/torrent_engine/domain"
@@ -19,6 +20,8 @@ type Service struct {
 	torrentEngine domain.ITorrentEngine
 	torrentSearch catalogdomain.ITorrentSearch
 	db            *gorm.DB
+	mu            sync.Mutex
+	jobs          map[string]*addJob
 }
 
 func (s *Service) AddTorrent(options *domain.AddTorrentOptions) (string, uint, error) {

@@ -46,7 +46,7 @@ The client is a streaming leecher, not a seeder:
 3. Each stream becomes a result: title, info-hash, file index, tracker list, IMDb id, year.
 4. Results are stored in an in-memory search cache (`[torrent] search_cache_ttl_minutes`, default 5). The handler returns the first 10.
 
-Adding a torrent only works for a hash that is still in that cache. `POST /torrent/add` looks the hash up, then asks the engine to resolve it.
+A hash add still needs that cache. A magnet does not. `POST /torrent/add` checks the body and answers with the fetch status. Metadata and the library write continue in the background, once per hash. `GET /torrent/status/<hash>` reads that status.
 
 ### Resolve and playback
 
@@ -56,7 +56,7 @@ Adding a torrent only works for a hash that is still in that cache. `POST /torre
 2. The largest file whose path looks like a video is selected. Torrents with no video file are rejected.
 3. A responsive reader is opened with a configurable readahead (`[webtorrent] readahead_mb`, default 50). Readahead is what lets a player seek and keep a buffer while rare pieces are still missing.
 4. If pieces are already on disk, a hybrid reader serves completed bytes from the local file and the rest from the swarm. That is the difference between "wait for the file" and "start the movie".
-5. The chosen file is stored in SQLite (`hash`, IMDb id, file index, display name, output path, size). Adding the same hash again returns the existing row.
+5. The chosen file is stored in SQLite (`hash`, IMDb id, file index, display name, output path, size). Sending the same hash again returns the saved title when the row already exists.
 6. The `.torrent` metainfo is written next to the data so a later restart does not depend on the search cache.
 
 On `serve`, saved torrents are resolved in the background so the swarm is warm before a TV opens the DMS.
@@ -75,10 +75,11 @@ FFmpeg/ffprobe wrappers and a `[transcode]` config block exist under `src/module
 | --- | --- | --- |
 | `GET` | `/healthz` | Liveness. |
 | `GET` | `/torrent/search?q=` | IMDb title search, then Torrentio streams. First 10 cached results. |
-| `POST` | `/torrent/add` | JSON `{"hash":"<info-hash>"}` or `{"magnet":"magnet:?xt=urn:btih:..."}`. A hash must be in the search cache. Returns `{"kind":"movie","id":n}` or `{"kind":"series","id":n}`. Times out after `TORRENT_ADD_TIMEOUT_SECONDS` (default 120). |
+| `POST` | `/torrent/add` | JSON `{"hash":"<info-hash>"}` or `{"magnet":"magnet:?xt=urn:btih:..."}`. A hash must be in the search cache. Responds at once with the fetch status. `202` starts metadata for that hash. `200` returns the status already in progress, or `ready` with `kind` and `id` when the hash is already in the library. A second call does not start another fetch. The attempt fails with `request timed out` after `TORRENT_ADD_TIMEOUT_SECONDS` (default 120). |
 | `DELETE` | `/movies/{id}` | 204. Drops the swarm, deletes the movie's files under the data dir, then the database row. `<hash>.torrent` goes after the row. 404 if the id is missing. 500 if the files cannot be located, and the row stays. |
 | `DELETE` | `/series/{id}` | Same as the movie delete, for the series, its episodes, and their torrent. |
 | `DELETE` | `/series/{id}/episodes/{episodeId}` | 204. Deletes that episode's file and its linked subtitle, and sets their priority to none. The swarm and the other episodes stay. The last episode deletes the series the same way as `DELETE /series/{id}`. 404 if the episode is missing. |
+| `GET` | `/torrent/status/{hash}` | `{"hash","phase","peers","name","kind","id","error"}`. `phase` is `metadata`, `ready`, or `failed`. `peers` is the active peer count, and `name` stays empty until the torrent info exists. `404` when the hash has no attempt and no library row. `400` when the hash is malformed. A saved hash answers `ready` after a restart. |
 | `GET` | `/movies` | Saved movies. `name` is the torrent folder. |
 | `GET` | `/series` | Saved series. `name` is the torrent folder. `size` is the sum of the videos. |
 | `GET` | `/series/{id}/episodes` | Episodes of that series, in `SxxEyy` order. |
@@ -106,7 +107,7 @@ What is not here yet: a DMR, a control point, `SetAVTransportURI`, or any push-t
 ## Features
 
 - Title search through IMDb, stream list through Torrentio (`brazuca` movie configuration). Search stays off until `IMDB_BASE_URL` and `TORRENTIO_BASE_URL` are both set.
-- BitTorrent streaming client with magnet parse (v1 and v2), tracker extraction, and `.torrent` persistence. `POST /torrent/add` accepts `{ "magnet": "magnet:?xt=urn:btih:..." }` and returns `kind` plus the movie or series id.
+- BitTorrent streaming client with magnet parse (v1 and v2), tracker extraction, and `.torrent` persistence. `POST /torrent/add` accepts `{ "magnet": "magnet:?xt=urn:btih:..." }` and returns the fetch status. `GET /torrent/status/{hash}` follows that attempt until the library row exists.
 - Largest-video selection, responsive reader, readahead, hybrid local/swarm reads.
 - SQLite library: one `torrents` row per hash, with the movie in `movies` or the pack in `series` and `episodes`. `GET /movies` and `GET /series` list them. `GET /series/{id}/episodes` lists the episodes.
 - HTTP range streaming with DLNA content-feature headers.

@@ -209,6 +209,8 @@ func (f *fakeEngine) RemoveFile(string, int) error { return nil }
 
 func (f *fakeEngine) IgnoreFiles(string, []int) error { return nil }
 
+func (f *fakeEngine) Swarm(string) (domain.SwarmView, bool) { return domain.SwarmView{}, false }
+
 func openTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 	db, err := gorm.Open(gormlite.Open(":memory:"), &gorm.Config{})
