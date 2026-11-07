@@ -37,6 +37,13 @@ type ITorrentEngine interface {
 	RemoveFile(hash string, index int) error
 	// IgnoreFiles sets priority none on those file indexes.
 	IgnoreFiles(hash string, indexes []int) error
+	// Swarm reports active peers and the info name when the hash is in the client.
+	Swarm(hash string) (SwarmView, bool)
+}
+
+type SwarmView struct {
+	Peers int
+	Name  string
 }
 
 type MagnetModel struct {
