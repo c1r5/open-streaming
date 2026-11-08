@@ -31,6 +31,12 @@ func (s *StreamingModule) registerRoutes() {
 	s.mux.HandleFunc("GET /series/{id}/episodes/{episodeId}/subtitle", func(w http.ResponseWriter, r *http.Request) {
 		s.c.EpisodeSubtitle()(w, r)
 	})
+	s.mux.HandleFunc("GET /movies/{id}/media", func(w http.ResponseWriter, r *http.Request) {
+		s.c.MovieMedia()(w, r)
+	})
+	s.mux.HandleFunc("GET /series/{id}/episodes/{episodeId}/media", func(w http.ResponseWriter, r *http.Request) {
+		s.c.EpisodeMedia()(w, r)
+	})
 	s.mux.HandleFunc("GET /movies/{id}/tracks", func(w http.ResponseWriter, r *http.Request) {
 		s.c.MovieTracks()(w, r)
 	})
