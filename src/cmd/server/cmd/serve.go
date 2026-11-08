@@ -80,11 +80,12 @@ var serveCmd = &cobra.Command{
 		handler := middleware.WithCORS(middleware.WithRecovery(middleware.WithLogging(mux)))
 
 		s := &http.Server{
-			Addr:           ":" + cfg.Server.Port,
-			Handler:        handler,
-			ReadTimeout:    time.Duration(cfg.Server.ReadTimeoutSeconds) * time.Second,
-			WriteTimeout:   0,
-			MaxHeaderBytes: cfg.Server.MaxHeaderBytes,
+			Addr:              ":" + cfg.Server.Port,
+			Handler:           handler,
+			ReadTimeout:       0,
+			ReadHeaderTimeout: time.Duration(cfg.Server.ReadTimeoutSeconds) * time.Second,
+			WriteTimeout:      0,
+			MaxHeaderBytes:    cfg.Server.MaxHeaderBytes,
 		}
 
 		go func() {

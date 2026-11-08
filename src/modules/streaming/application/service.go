@@ -3,6 +3,7 @@ package application
 import (
 	"fmt"
 	"log"
+	"os"
 	"path"
 	"strings"
 
@@ -21,10 +22,25 @@ func NewService(eng enginedomain.ITorrentEngine, db *gorm.DB) *Service {
 	return &Service{engine: eng, db: db}
 }
 
+func (s *Service) openLocal(hash string, index int) (*streamdomain.TorrentStreamFile, error) {
+	path, _, err := s.engine.LocalFile(hash, index)
+	if err != nil {
+		return nil, err
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("streaming -> file not found -> %w", err)
+	}
+	return &streamdomain.TorrentStreamFile{Path: path, Reader: file}, nil
+}
+
 func (s *Service) GetMovieFile(id uint) (*streamdomain.TorrentStreamFile, error) {
 	var movie persistence.MovieModel
 	if err := s.db.Preload("Torrent").First(&movie, id).Error; err != nil {
 		return nil, fmt.Errorf("streaming -> movie not found -> %w", err)
+	}
+	if movie.LocalPlayback {
+		return s.openLocal(movie.Torrent.Hash, movie.FileIndex)
 	}
 	log.Printf("service: resolving movie id=%d hash=%s", id, movie.Torrent.Hash)
 	file, err := s.engine.Resolve(movie.Torrent.Hash)
@@ -40,6 +56,9 @@ func (s *Service) GetEpisodeFile(seriesID, episodeID uint) (*streamdomain.Torren
 	err := s.db.Preload("Series.Torrent").Where("series_id = ?", seriesID).First(&episode, episodeID).Error
 	if err != nil {
 		return nil, fmt.Errorf("streaming -> episode not found -> %w", err)
+	}
+	if episode.LocalPlayback {
+		return s.openLocal(episode.Series.Torrent.Hash, episode.FileIndex)
 	}
 	log.Printf("service: resolving episode series=%d id=%d hash=%s index=%d", seriesID, episodeID, episode.Series.Torrent.Hash, episode.FileIndex)
 	file, err := s.engine.ResolveFile(episode.Series.Torrent.Hash, episode.FileIndex)

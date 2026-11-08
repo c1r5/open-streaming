@@ -235,3 +235,5 @@ func (e *statusEngine) Swarm(string) (domain.SwarmView, bool) {
 	defer e.mu.Unlock()
 	return domain.SwarmView{Peers: e.peers, Name: e.name}, true
 }
+func (e *statusEngine) LocalFile(string, int) (string, bool, error) { return "", false, nil }
+func (e *statusEngine) DetachFile(string, int) error                 { return nil }

@@ -64,6 +64,23 @@ func init() {
 			return db.Migrator().DropColumn(&persistence.EpisodeModel{}, "SubtitleExt")
 		},
 	})
+
+	database.RegisterMigration(database.Migration{
+		Version:     5,
+		Description: "Trilha extra e playback local do MKV substituído",
+		Up: func(db *gorm.DB) error {
+			return db.AutoMigrate(&persistence.MovieModel{}, &persistence.EpisodeModel{}, &persistence.ExtraTrackModel{})
+		},
+		Down: func(db *gorm.DB) error {
+			if err := db.Migrator().DropTable(&persistence.ExtraTrackModel{}); err != nil {
+				return err
+			}
+			if err := db.Migrator().DropColumn(&persistence.MovieModel{}, "LocalPlayback"); err != nil {
+				return err
+			}
+			return db.Migrator().DropColumn(&persistence.EpisodeModel{}, "LocalPlayback")
+		},
+	})
 }
 
 func columnExists(db *gorm.DB, table, column string) bool {

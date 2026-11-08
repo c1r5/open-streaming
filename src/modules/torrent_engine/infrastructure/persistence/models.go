@@ -17,11 +17,12 @@ func (TorrentModel) TableName() string { return "torrents" }
 
 type MovieModel struct {
 	gorm.Model
-	TorrentID uint         `gorm:"column:torrent_id;uniqueIndex"`
-	Torrent   TorrentModel `gorm:"foreignKey:TorrentID;references:ID;constraint:OnDelete:CASCADE"`
-	FileIndex int          `gorm:"column:file_index"`
-	Size      int64        `gorm:"column:size"`
-	IMDB      *string      `gorm:"column:imdb;uniqueIndex"`
+	TorrentID     uint         `gorm:"column:torrent_id;uniqueIndex"`
+	Torrent       TorrentModel `gorm:"foreignKey:TorrentID;references:ID;constraint:OnDelete:CASCADE"`
+	FileIndex     int          `gorm:"column:file_index"`
+	Size          int64        `gorm:"column:size"`
+	IMDB          *string      `gorm:"column:imdb;uniqueIndex"`
+	LocalPlayback bool         `gorm:"column:local_playback"`
 }
 
 func (MovieModel) TableName() string { return "movies" }
@@ -45,7 +46,20 @@ type EpisodeModel struct {
 	Size          int64       `gorm:"column:size"`
 	SubtitleIndex *int        `gorm:"column:subtitle_index"`
 	SubtitleExt   string      `gorm:"column:subtitle_ext"`
+	LocalPlayback bool        `gorm:"column:local_playback"`
 }
+
+type ExtraTrackModel struct {
+	gorm.Model
+	MovieID   *uint  `gorm:"column:movie_id;index"`
+	EpisodeID *uint  `gorm:"column:episode_id;index"`
+	Kind      string `gorm:"column:kind"`
+	Language  string `gorm:"column:language"`
+	Title     string `gorm:"column:title"`
+	IsDefault bool   `gorm:"column:is_default"`
+}
+
+func (ExtraTrackModel) TableName() string { return "extra_tracks" }
 
 func (EpisodeModel) TableName() string { return "episodes" }
 

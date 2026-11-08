@@ -56,7 +56,16 @@ func warmUpEngine(eng domain.ITorrentEngine, db *gorm.DB) {
 				return
 			}
 			if errors.Is(err, gorm.ErrRecordNotFound) {
-				if _, err := eng.Resolve(hash); err != nil {
+				var movie persistence.MovieModel
+				if err := db.Where("torrent_id = ?", torrentID).First(&movie).Error; err != nil {
+					log.Printf("engine warm-up: movie query failed for hash=%s: %v", hash, err)
+					return
+				}
+				if movie.LocalPlayback {
+					if err := eng.DetachFile(hash, movie.FileIndex); err != nil {
+						log.Printf("engine warm-up: detach movie failed for hash=%s: %v", hash, err)
+					}
+				} else if _, err := eng.Resolve(hash); err != nil {
 					log.Printf("engine warm-up: failed for hash=%s: %v", hash, err)
 					return
 				}
@@ -78,8 +87,13 @@ func warmUpEngine(eng domain.ITorrentEngine, db *gorm.DB) {
 				return
 			}
 			keep := map[int]bool{}
+			detach := make([]int, 0)
 			for _, episode := range episodes {
-				keep[episode.FileIndex] = true
+				if episode.LocalPlayback {
+					detach = append(detach, episode.FileIndex)
+				} else {
+					keep[episode.FileIndex] = true
+				}
 				if episode.SubtitleIndex != nil {
 					keep[*episode.SubtitleIndex] = true
 				}
@@ -92,6 +106,11 @@ func warmUpEngine(eng domain.ITorrentEngine, db *gorm.DB) {
 			}
 			if err := eng.IgnoreFiles(hash, ignore); err != nil {
 				log.Printf("engine warm-up: ignore files failed for hash=%s: %v", hash, err)
+			}
+			for _, index := range detach {
+				if err := eng.DetachFile(hash, index); err != nil {
+					log.Printf("engine warm-up: detach episode failed for hash=%s index=%d: %v", hash, index, err)
+				}
 			}
 			log.Printf("engine warm-up: ready (hash=%s)", hash)
 			if err := eng.PersistTorrentFile(hash); err != nil {
