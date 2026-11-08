@@ -15,6 +15,8 @@ FROM alpine:latest
 
 WORKDIR /app
 
+RUN apk add --no-cache ffmpeg
+
 COPY --from=builder /app/server .
 
 EXPOSE 3000
