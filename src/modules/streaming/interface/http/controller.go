@@ -53,6 +53,37 @@ func (c *Controller) EpisodeWatch() sharedhttp.HandlerFunc {
 	}
 }
 
+func (c *Controller) MovieMedia() sharedhttp.HandlerFunc {
+	return func(w stdhttp.ResponseWriter, r *stdhttp.Request) {
+		id, err := strconv.ParseUint(sharedhttp.PathParam(r, "id"), 10, 64)
+		if err != nil {
+			sharedhttp.ErrorJSON(w, stdhttp.StatusBadRequest, "invalid id")
+			return
+		}
+		media, err := c.service.MovieMedia(uint(id))
+		writeMedia(w, media, err)
+	}
+}
+
+func (c *Controller) EpisodeMedia() sharedhttp.HandlerFunc {
+	return func(w stdhttp.ResponseWriter, r *stdhttp.Request) {
+		seriesID, episodeID, ok := seriesEpisodeIDs(w, r)
+		if !ok {
+			return
+		}
+		media, err := c.service.EpisodeMedia(seriesID, episodeID)
+		writeMedia(w, media, err)
+	}
+}
+
+func writeMedia(w stdhttp.ResponseWriter, media *application.Media, err error) {
+	if err != nil {
+		writeTrackError(w, err)
+		return
+	}
+	sharedhttp.JSON(w, stdhttp.StatusOK, media)
+}
+
 func (c *Controller) MovieTracks() sharedhttp.HandlerFunc {
 	return func(w stdhttp.ResponseWriter, r *stdhttp.Request) {
 		id, err := strconv.ParseUint(sharedhttp.PathParam(r, "id"), 10, 64)
