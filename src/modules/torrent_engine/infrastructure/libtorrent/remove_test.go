@@ -170,3 +170,82 @@ func TestRemoveFileDeletesOnlyThatFile(t *testing.T) {
 		t.Fatal("missing index returned nil")
 	}
 }
+
+func TestRemoveFileDeletesReplacedVideoAndKeepsNeighbor(t *testing.T) {
+	dir := t.TempDir()
+	show := filepath.Join(dir, "Show")
+	if err := os.MkdirAll(show, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	first := filepath.Join(show, "e01.mkv")
+	second := filepath.Join(show, "e02.mkv")
+	if err := os.WriteFile(first, []byte("replaced-mkv-with-extra-tracks"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(second, []byte("neighbor"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	const hash = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	writeTorrent(t, dir, hash, metainfo.Info{
+		Name:        "Show",
+		PieceLength: 16 * 1024,
+		Files: []metainfo.FileInfo{
+			{Path: []string{"e01.mkv"}, Length: 1},
+			{Path: []string{"e02.mkv"}, Length: 1},
+		},
+	})
+
+	engine, err := NewEngine(nil, nil, EngineOptions{DataDir: dir})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := engine.RemoveFile(hash, 0); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(first); !os.IsNotExist(err) {
+		t.Fatalf("replaced video stat %v", err)
+	}
+	got, err := os.ReadFile(second)
+	if err != nil || string(got) != "neighbor" {
+		t.Fatalf("neighbor %q %v", got, err)
+	}
+
+	movie := filepath.Join(dir, "movie.mkv")
+	if err := os.WriteFile(movie, []byte("movie-with-added-audio"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	const movieHash = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+	writeTorrent(t, dir, movieHash, metainfo.Info{
+		Name:        "movie.mkv",
+		PieceLength: 16 * 1024,
+		Length:      1,
+	})
+	if err := engine.Remove(movieHash); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(movie); !os.IsNotExist(err) {
+		t.Fatalf("movie stat %v", err)
+	}
+	if _, err := os.Stat(second); err != nil {
+		t.Fatalf("neighbor lost %v", err)
+	}
+}
+
+func writeTorrent(t *testing.T, dir, hash string, info metainfo.Info) {
+	t.Helper()
+	payload, err := bencode.Marshal(info)
+	if err != nil {
+		t.Fatal(err)
+	}
+	file, err := os.Create(filepath.Join(dir, hash+".torrent"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := (&metainfo.MetaInfo{InfoBytes: payload}).Write(file); err != nil {
+		file.Close()
+		t.Fatal(err)
+	}
+	if err := file.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
