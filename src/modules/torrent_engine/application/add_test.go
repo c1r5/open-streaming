@@ -210,6 +210,8 @@ func (f *fakeEngine) RemoveFile(string, int) error { return nil }
 func (f *fakeEngine) IgnoreFiles(string, []int) error { return nil }
 
 func (f *fakeEngine) Swarm(string) (domain.SwarmView, bool) { return domain.SwarmView{}, false }
+func (f *fakeEngine) LocalFile(string, int) (string, bool, error) { return "", false, nil }
+func (f *fakeEngine) DetachFile(string, int) error                { return nil }
 
 func openTestDB(t *testing.T) *gorm.DB {
 	t.Helper()

@@ -125,3 +125,5 @@ func (e *streamEngine) IgnoreFiles(string, []int) error { return nil }
 func (e *streamEngine) Swarm(string) (enginedomain.SwarmView, bool) {
 	return enginedomain.SwarmView{}, false
 }
+func (e *streamEngine) LocalFile(string, int) (string, bool, error) { return "", false, nil }
+func (e *streamEngine) DetachFile(string, int) error                 { return nil }

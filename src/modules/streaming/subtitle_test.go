@@ -143,3 +143,5 @@ func (e *subtitleEngine) IgnoreFiles(string, []int) error { return nil }
 func (e *subtitleEngine) Swarm(string) (enginedomain.SwarmView, bool) {
 	return enginedomain.SwarmView{}, false
 }
+func (e *subtitleEngine) LocalFile(string, int) (string, bool, error) { return "", false, nil }
+func (e *subtitleEngine) DetachFile(string, int) error                 { return nil }

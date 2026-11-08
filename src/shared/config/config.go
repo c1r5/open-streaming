@@ -28,6 +28,7 @@ type Config struct {
 	Transcode     TranscodeConfig
 	Resolver      ResolverConfig
 	Server        ServerConfig
+	Mux           MuxConfig
 	IMDB          IMDBConfig
 	Torrentio     TorrentioConfig
 	Torrent       TorrentConfig
@@ -72,6 +73,10 @@ type ServerConfig struct {
 	Port               string
 	ReadTimeoutSeconds int
 	MaxHeaderBytes     int
+}
+
+type MuxConfig struct {
+	TimeoutSeconds int
 }
 
 type TorrentConfig struct {
@@ -154,6 +159,9 @@ func loadFromEnv() *Config {
 			Port:               envString("SERVER_PORT", "3000"),
 			ReadTimeoutSeconds: envInt("SERVER_READ_TIMEOUT_SECONDS", 10),
 			MaxHeaderBytes:     envInt("SERVER_MAX_HEADER_BYTES", 1<<20),
+		},
+		Mux: MuxConfig{
+			TimeoutSeconds: envInt("MUX_TIMEOUT_SECONDS", 3600),
 		},
 		Torrent: TorrentConfig{
 			SearchCacheTTLMinutes: envInt("TORRENT_SEARCH_CACHE_TTL_MINUTES", 5),

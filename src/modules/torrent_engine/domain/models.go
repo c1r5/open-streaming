@@ -39,6 +39,10 @@ type ITorrentEngine interface {
 	IgnoreFiles(hash string, indexes []int) error
 	// Swarm reports active peers and the info name when the hash is in the client.
 	Swarm(hash string) (SwarmView, bool)
+	// LocalFile is the on-disk path of one torrent file and whether every piece is present.
+	LocalFile(hash string, index int) (path string, complete bool, err error)
+	// DetachFile sets priority none and drops the reader cache. The file stays on disk.
+	DetachFile(hash string, index int) error
 }
 
 type SwarmView struct {
